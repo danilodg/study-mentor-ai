@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
+import type { Session } from '@supabase/supabase-js'
 import {
   ArrowLeft,
   ArrowUp,
@@ -12,13 +13,18 @@ import {
   SunMedium,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { isSupabaseConfigured, supabase } from './lib/supabase'
 
 type Theme = 'dark' | 'light'
 type Language = 'pt' | 'en'
-type Screen = 'landing' | 'chat'
+type Screen = 'landing' | 'auth' | 'chat'
 type ResponseMode = 'auto' | 'quiz_mcq' | 'true_false' | 'short_answer'
+type ForcedResponseMode = ResponseMode | 'text'
 type ConversationMode = 'chat' | 'exam'
 type DifficultyLevel = 'auto' | 'easy' | 'medium' | 'hard'
+type ExamProfile = 'general' | 'enem'
+type ExamFlow = 'single' | 'passage'
+type PlanCode = 'free' | 'pro'
 
 type ThemeVariables = CSSProperties & {
   '--page-bg': string
@@ -52,6 +58,7 @@ interface Message {
   id: string
   role: 'assistant' | 'user'
   text: string
+  isExamPassage?: boolean
   responseType?: 'text' | 'quiz_mcq' | 'true_false' | 'short_answer'
   quiz?: QuizActivity
   trueFalse?: TrueFalseActivity
@@ -126,6 +133,10 @@ interface Conversation {
   mode: ConversationMode
   topic: string
   difficulty: DifficultyLevel
+  examProfile: ExamProfile
+  examFlow: ExamFlow
+  examPassage: string
+  examQuestionTarget: number
   questionCount: number
   createdAt: number
   updatedAt: number
@@ -397,6 +408,13 @@ const copy: Record<Language, CopyBlock> = {
 
 const googleAiApiKey = import.meta.env.VITE_GOOGLE_AI_API_KEY?.trim()
 const chatStorageKey = 'study-mentor-ai-chat'
+const cloudSyncDebounceMs = 1300
+
+function parseStoredResponseMode(value: unknown): ResponseMode {
+  return value === 'quiz_mcq' || value === 'true_false' || value === 'short_answer' || value === 'auto'
+    ? value
+    : 'auto'
+}
 const googleAiApiUrl = googleAiApiKey
   ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${googleAiApiKey}`
   : ''
@@ -487,7 +505,35 @@ const difficultyLabel: Record<Language, Record<DifficultyLevel, string>> = {
   },
 }
 
-function getResponseModeInstruction(language: Language, mode: ResponseMode) {
+const examProfileLabel: Record<Language, Record<ExamProfile, string>> = {
+  pt: {
+    general: 'Prova geral',
+    enem: 'ENEM',
+  },
+  en: {
+    general: 'General exam',
+    enem: 'ENEM style',
+  },
+}
+
+const examFlowLabel: Record<Language, Record<ExamFlow, string>> = {
+  pt: {
+    single: 'Questoes avulsas',
+    passage: 'Texto + 4 questoes',
+  },
+  en: {
+    single: 'Single questions',
+    passage: 'Passage + 4 questions',
+  },
+}
+
+function getResponseModeInstruction(language: Language, mode: ForcedResponseMode) {
+  if (mode === 'text') {
+    return language === 'pt'
+      ? 'Modo de resposta: FORCADO em text. Retorne exatamente esse tipo.'
+      : 'Response mode: FORCED to text. Return exactly that type.'
+  }
+
   if (mode === 'auto') {
     return language === 'pt'
       ? 'Modo de resposta: AUTO. Escolha o melhor tipo entre text, quiz_mcq, true_false e short_answer.'
@@ -655,7 +701,7 @@ function parseAssistantReply(rawText: string): AssistantReplyPayload {
   }
 }
 
-function createConversation(overrides?: Partial<Pick<Conversation, 'mode' | 'topic' | 'difficulty' | 'title'>>) {
+function createConversation(overrides?: Partial<Pick<Conversation, 'mode' | 'topic' | 'difficulty' | 'title' | 'examProfile' | 'examFlow' | 'examPassage' | 'examQuestionTarget'>>) {
   const now = Date.now()
 
   return {
@@ -665,6 +711,10 @@ function createConversation(overrides?: Partial<Pick<Conversation, 'mode' | 'top
     mode: overrides?.mode ?? 'chat',
     topic: overrides?.topic ?? '',
     difficulty: overrides?.difficulty ?? 'auto',
+    examProfile: overrides?.examProfile ?? 'general',
+    examFlow: overrides?.examFlow ?? 'single',
+    examPassage: overrides?.examPassage ?? '',
+    examQuestionTarget: overrides?.examQuestionTarget ?? 0,
     questionCount: 0,
     createdAt: now,
     updatedAt: now,
@@ -682,12 +732,6 @@ function getStoredChatState() {
     return null
   }
 
-  const parseStoredResponseMode = (value: unknown): ResponseMode => (
-    value === 'quiz_mcq' || value === 'true_false' || value === 'short_answer' || value === 'auto'
-      ? value
-      : 'auto'
-  )
-
   try {
     const parsed = JSON.parse(rawState) as StoredChatState
 
@@ -701,6 +745,10 @@ function getStoredChatState() {
         difficulty: conversation.difficulty === 'easy' || conversation.difficulty === 'medium' || conversation.difficulty === 'hard' || conversation.difficulty === 'auto'
           ? conversation.difficulty
           : 'auto',
+        examProfile: conversation.examProfile === 'enem' ? 'enem' : 'general',
+        examFlow: conversation.examFlow === 'passage' ? 'passage' : 'single',
+        examPassage: typeof conversation.examPassage === 'string' ? conversation.examPassage : '',
+        examQuestionTarget: typeof conversation.examQuestionTarget === 'number' ? conversation.examQuestionTarget : 0,
         questionCount: typeof conversation.questionCount === 'number' ? conversation.questionCount : 0,
         createdAt: conversation.createdAt,
         updatedAt: conversation.updatedAt,
@@ -729,6 +777,10 @@ function getStoredChatState() {
           mode: 'chat',
           topic: '',
           difficulty: 'auto',
+          examProfile: 'general',
+          examFlow: 'single',
+          examPassage: '',
+          examQuestionTarget: 0,
           questionCount: 0,
         }],
         activeConversationId: migratedConversation.id,
@@ -764,6 +816,8 @@ function App() {
   const [responseMode, setResponseMode] = useState<ResponseMode>(storedChatState?.responseMode ?? 'auto')
   const [isNewConversationModalOpen, setIsNewConversationModalOpen] = useState(false)
   const [newConversationMode, setNewConversationMode] = useState<ConversationMode>('chat')
+  const [newConversationExamProfile, setNewConversationExamProfile] = useState<ExamProfile>('general')
+  const [newConversationExamFlow, setNewConversationExamFlow] = useState<ExamFlow>('single')
   const [newConversationTopic, setNewConversationTopic] = useState('')
   const [newConversationDifficulty, setNewConversationDifficulty] = useState<DifficultyLevel>('auto')
   const [screen, setScreen] = useState<Screen>('landing')
@@ -774,6 +828,15 @@ function App() {
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations)
   const [activeConversationId, setActiveConversationId] = useState<string>(storedChatState?.activeConversationId ?? initialConversations[0].id)
   const [isLoading, setIsLoading] = useState(false)
+  const [session, setSession] = useState<Session | null>(null)
+  const [userPlan, setUserPlan] = useState<PlanCode>('free')
+  const [isCloudSyncEnabled, setIsCloudSyncEnabled] = useState(false)
+  const [hasLoadedCloudState, setHasLoadedCloudState] = useState(false)
+  const [lastCloudSyncAt, setLastCloudSyncAt] = useState<number | null>(null)
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [isAuthBusy, setIsAuthBusy] = useState(false)
   const [nowMs, setNowMs] = useState(() => Date.now())
   const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const examGenerationRequestsRef = useRef<Set<string>>(new Set())
@@ -790,7 +853,40 @@ function App() {
     [activeConversationId, conversations],
   )
   const messages = activeConversation?.messages ?? []
+  const visibleMessages = messages.filter((message) => {
+    if (message.isExamPassage) {
+      return false
+    }
+
+    if (
+      activeConversation?.mode === 'exam'
+      && activeConversation.examFlow === 'passage'
+      && message.role === 'assistant'
+      && /^Texto-base para as proximas questoes:|^Base passage for the next questions:/i.test(message.text.trim())
+    ) {
+      return false
+    }
+
+    return true
+  })
   const isDesktopSidebarOpen = isDesktopSidebarPinned || isDesktopSidebarHovered
+  const hasPendingExamMessage = activeConversation?.mode === 'exam'
+    && messages.some((message) => message.id.startsWith('pending-'))
+  const showStickyPassagePanel = Boolean(
+    activeConversation
+      && activeConversation.mode === 'exam'
+      && activeConversation.examFlow === 'passage'
+      && activeConversation.examPassage.trim(),
+  )
+  const cloudSyncTimeText = lastCloudSyncAt
+    ? new Date(lastCloudSyncAt).toLocaleTimeString(language === 'pt' ? 'pt-BR' : 'en-US', { hour: '2-digit', minute: '2-digit' })
+    : ''
+  const currentStoredState: StoredChatState = {
+    conversations,
+    activeConversationId,
+    language,
+    responseMode,
+  }
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -799,14 +895,129 @@ function App() {
 
     window.localStorage.setItem(
       chatStorageKey,
-      JSON.stringify({
-        conversations,
-        activeConversationId,
-        language,
-        responseMode,
-      } satisfies StoredChatState),
+      JSON.stringify(currentStoredState),
     )
-  }, [activeConversationId, conversations, language, responseMode])
+  }, [currentStoredState])
+
+  useEffect(() => {
+    if (!supabase) {
+      return
+    }
+
+    let isMounted = true
+
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) {
+        return
+      }
+
+      setSession(data.session ?? null)
+      setIsCloudSyncEnabled(Boolean(data.session))
+      setHasLoadedCloudState(false)
+
+      if (!data.session) {
+        setUserPlan('free')
+      }
+    })
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      setIsCloudSyncEnabled(false)
+      setHasLoadedCloudState(false)
+      setLastCloudSyncAt(null)
+      setAuthError('')
+
+      if (!nextSession) {
+        setUserPlan('free')
+      }
+
+      if (nextSession) {
+        setScreen('chat')
+      }
+    })
+
+    return () => {
+      isMounted = false
+      authListener.subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase || !session || hasLoadedCloudState) {
+      return
+    }
+
+    const client = supabase
+
+    let cancelled = false
+
+    const loadCloudState = async () => {
+      const { data, error } = await client
+        .from('user_workspace_states')
+        .select('state, plan_code')
+        .eq('user_id', session.user.id)
+        .maybeSingle()
+
+      if (cancelled) {
+        return
+      }
+
+      const planCode = data?.plan_code === 'pro' ? 'pro' : 'free'
+      const state = data?.state as StoredChatState | null
+
+      setUserPlan(planCode)
+      setIsCloudSyncEnabled(planCode === 'pro')
+
+      if (!error && planCode === 'pro' && state?.conversations?.length) {
+        const nextConversations = state.conversations
+        const nextActiveConversationId = nextConversations.some((conversation) => conversation.id === state.activeConversationId)
+          ? state.activeConversationId
+          : nextConversations[0].id
+
+        setConversations(nextConversations)
+        setActiveConversationId(nextActiveConversationId)
+        setLanguage(state.language === 'en' ? 'en' : 'pt')
+        setResponseMode(parseStoredResponseMode(state.responseMode))
+      }
+
+      setHasLoadedCloudState(true)
+    }
+
+    void loadCloudState()
+
+    return () => {
+      cancelled = true
+    }
+  }, [hasLoadedCloudState, session])
+
+  useEffect(() => {
+    if (!supabase || !session || !hasLoadedCloudState || !isCloudSyncEnabled || userPlan !== 'pro') {
+      return
+    }
+
+    const client = supabase
+
+    const timeoutId = window.setTimeout(() => {
+      void client
+        .from('user_workspace_states')
+        .upsert({
+          user_id: session.user.id,
+          state: currentStoredState,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id',
+        })
+        .then(({ error }) => {
+          if (!error) {
+            setLastCloudSyncAt(Date.now())
+          }
+        })
+    }, cloudSyncDebounceMs)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [currentStoredState, hasLoadedCloudState, isCloudSyncEnabled, session, userPlan])
 
   useEffect(() => {
     if (!activeConversation || isLoading) {
@@ -857,6 +1068,102 @@ function App() {
     element.style.overflowY = element.scrollHeight > maxHeight ? 'auto' : 'hidden'
   }
 
+  function goToChatWithAuthGate() {
+    if (isSupabaseConfigured && !session) {
+      setScreen('auth')
+      return
+    }
+
+    setScreen('chat')
+  }
+
+  async function signInWithEmail() {
+    if (!supabase) {
+      setAuthError(language === 'pt' ? 'Supabase nao configurado no ambiente.' : 'Supabase is not configured in this environment.')
+      return
+    }
+
+    if (!authEmail.trim() || !authPassword.trim()) {
+      setAuthError(language === 'pt' ? 'Informe email e senha.' : 'Please provide email and password.')
+      return
+    }
+
+    setIsAuthBusy(true)
+    setAuthError('')
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: authEmail.trim(),
+      password: authPassword,
+    })
+
+    if (error) {
+      setAuthError(error.message)
+    }
+
+    setIsAuthBusy(false)
+  }
+
+  async function signUpWithEmail() {
+    if (!supabase) {
+      setAuthError(language === 'pt' ? 'Supabase nao configurado no ambiente.' : 'Supabase is not configured in this environment.')
+      return
+    }
+
+    if (!authEmail.trim() || !authPassword.trim()) {
+      setAuthError(language === 'pt' ? 'Informe email e senha.' : 'Please provide email and password.')
+      return
+    }
+
+    setIsAuthBusy(true)
+    setAuthError('')
+
+    const { error } = await supabase.auth.signUp({
+      email: authEmail.trim(),
+      password: authPassword,
+    })
+
+    if (error) {
+      setAuthError(error.message)
+    } else {
+      setAuthError(language === 'pt' ? 'Conta criada. Se necessario, confirme seu email.' : 'Account created. Confirm your email if required.')
+    }
+
+    setIsAuthBusy(false)
+  }
+
+  async function signInWithGoogle() {
+    if (!supabase) {
+      setAuthError(language === 'pt' ? 'Supabase nao configurado no ambiente.' : 'Supabase is not configured in this environment.')
+      return
+    }
+
+    setIsAuthBusy(true)
+    setAuthError('')
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    })
+
+    if (error) {
+      setAuthError(error.message)
+      setIsAuthBusy(false)
+      return
+    }
+  }
+
+  async function signOutFromCloud() {
+    if (!supabase) {
+      return
+    }
+
+    await supabase.auth.signOut()
+    setAuthPassword('')
+    setScreen('auth')
+  }
+
   useEffect(() => {
     if (draftTextareaRef.current) {
       resizeDraftTextarea(draftTextareaRef.current)
@@ -885,7 +1192,7 @@ function App() {
   async function getGoogleAiReply(
     text: string,
     options?: {
-      forcedMode?: ResponseMode
+      forcedMode?: ForcedResponseMode
       extraInstruction?: string
     },
   ): Promise<AssistantReplyPayload> {
@@ -969,6 +1276,27 @@ function App() {
     setDraft('')
 
     if (activeConversation.mode === 'exam') {
+      if (
+        activeConversation.examFlow === 'passage'
+        && activeConversation.examQuestionTarget > 0
+        && activeConversation.questionCount >= activeConversation.examQuestionTarget
+      ) {
+        setConversations((current) => current.map((conversation) => {
+          if (conversation.id !== conversationId) {
+            return conversation
+          }
+
+          return {
+            ...conversation,
+            questionCount: 0,
+            updatedAt: Date.now(),
+          }
+        }))
+
+        void generateExamQuestion(conversationId, 1, undefined, true)
+        return
+      }
+
       void generateExamQuestion(conversationId, activeConversation.questionCount + 1)
       return
     }
@@ -1160,7 +1488,12 @@ function App() {
     setIsNewConversationModalOpen(false)
   }
 
-  async function generateExamQuestion(conversationId: string, nextQuestionNumber: number, replaceMessageId?: string) {
+  async function generateExamQuestion(
+    conversationId: string,
+    nextQuestionNumber: number,
+    replaceMessageId?: string,
+    forceNewPassage = false,
+  ) {
     const blockedUntil = examBlockedUntilRef.current.get(conversationId) ?? 0
 
     if (Date.now() < blockedUntil) {
@@ -1175,7 +1508,47 @@ function App() {
 
     const targetConversation = conversations.find((conversation) => conversation.id === conversationId)
 
-    if (!targetConversation || !targetConversation.topic.trim()) {
+    if (!targetConversation) {
+      return
+    }
+
+    const maxQuestions = targetConversation.examQuestionTarget > 0
+      ? targetConversation.examQuestionTarget
+      : 0
+
+    if (maxQuestions > 0 && nextQuestionNumber > maxQuestions) {
+      const completionText = language === 'pt'
+        ? 'Bloco finalizado. Se quiser, posso gerar um novo texto com mais 4 questoes.'
+        : 'Set completed. I can generate a new passage with 4 more questions if you want.'
+
+      setConversations((current) => current.map((conversation) => {
+        if (conversation.id !== conversationId) {
+          return conversation
+        }
+
+        const alreadyHasRecentCompletion = conversation.messages
+          .slice(-6)
+          .some((message) => message.role === 'assistant' && message.text === completionText)
+
+        if (alreadyHasRecentCompletion) {
+          return conversation
+        }
+
+        return {
+          ...conversation,
+          messages: [
+            ...conversation.messages,
+            {
+              id: `a-${Date.now()}-set-complete`,
+              role: 'assistant',
+              responseType: 'text',
+              text: completionText,
+            },
+          ],
+          updatedAt: Date.now(),
+        }
+      }))
+
       return
     }
 
@@ -1203,27 +1576,91 @@ function App() {
     try {
       setIsLoading(true)
 
+      const profileInstruction = targetConversation.examProfile === 'enem'
+        ? (language === 'pt'
+            ? 'Perfil da prova: ENEM. Priorize contexto, interpretacao e aplicacao pratica.'
+            : 'Exam profile: ENEM style. Prioritize context, interpretation, and practical application.')
+        : (language === 'pt'
+            ? 'Perfil da prova: geral.'
+            : 'Exam profile: general.')
+
+      const topicInstruction = targetConversation.topic.trim()
+        ? (language === 'pt'
+            ? `Assunto preferencial: ${targetConversation.topic.trim()}.`
+            : `Preferred topic: ${targetConversation.topic.trim()}.`)
+        : (language === 'pt'
+            ? 'Assunto: escolha autonomamente um tema recorrente de prova para esta dificuldade.'
+            : 'Topic: autonomously choose a common exam topic for this difficulty.')
+
+      let generatedPassageText = forceNewPassage ? '' : targetConversation.examPassage.trim()
+
+      if (targetConversation.examFlow === 'passage' && !generatedPassageText) {
+        const passageReply = await getGoogleAiReply(
+          language === 'pt'
+            ? 'Crie um texto-base curto para prova.'
+            : 'Create a short exam reading passage.',
+          {
+            forcedMode: 'text',
+            extraInstruction: language === 'pt'
+              ? [
+                profileInstruction,
+                topicInstruction,
+                targetConversation.difficulty === 'auto' ? 'Dificuldade: auto.' : `Dificuldade: ${targetConversation.difficulty}.`,
+                'Retorne somente texto no campo text (sem perguntas, sem gabarito).',
+                'O texto deve ser claro e ter de 120 a 220 palavras.',
+              ].join(' ')
+              : [
+                profileInstruction,
+                topicInstruction,
+                targetConversation.difficulty === 'auto' ? 'Difficulty: auto.' : `Difficulty: ${targetConversation.difficulty}.`,
+                'Return only passage text in the text field (no questions, no answers).',
+                'The passage should be clear and around 120 to 220 words.',
+              ].join(' '),
+          },
+        )
+
+        generatedPassageText = passageReply.text.trim()
+      }
+
       const questionPayload = await getGoogleAiReply(
-        language === 'pt'
-          ? `Gere a questao ${nextQuestionNumber} sobre ${targetConversation.topic}.`
-          : `Generate question ${nextQuestionNumber} about ${targetConversation.topic}.`,
+        targetConversation.examFlow === 'passage' && generatedPassageText
+          ? (
+            language === 'pt'
+              ? `Com base no texto abaixo, gere a questao ${nextQuestionNumber}.\n\nTexto-base:\n${generatedPassageText}`
+              : `Based on the text below, generate question ${nextQuestionNumber}.\n\nPassage:\n${generatedPassageText}`
+          )
+          : (
+            language === 'pt'
+              ? `Gere a questao ${nextQuestionNumber}.`
+              : `Generate question ${nextQuestionNumber}.`
+          ),
         {
           forcedMode: 'auto',
           extraInstruction: language === 'pt'
             ? [
               'Contexto de prova: retorne apenas um dos tipos quiz_mcq, true_false ou short_answer.',
               'Nao retorne text neste fluxo de prova.',
+              profileInstruction,
+              topicInstruction,
               targetConversation.difficulty === 'auto'
                 ? 'Dificuldade: auto.'
                 : `Dificuldade: ${targetConversation.difficulty}.`,
+              targetConversation.examFlow === 'passage'
+                ? `Este e um bloco baseado no mesmo texto. Gere a questao ${nextQuestionNumber} de ${maxQuestions || 4} variando habilidade cognitiva.`
+                : '',
               historyInstruction,
             ].join(' ')
             : [
               'Exam context: return only quiz_mcq, true_false, or short_answer.',
               'Do not return text in this exam flow.',
+              profileInstruction,
+              topicInstruction,
               targetConversation.difficulty === 'auto'
                 ? 'Difficulty: auto.'
                 : `Difficulty: ${targetConversation.difficulty}.`,
+              targetConversation.examFlow === 'passage'
+                ? `This is a single passage-based set. Generate question ${nextQuestionNumber} of ${maxQuestions || 4} with varied cognitive skills.`
+                : '',
               historyInstruction,
             ].join(' '),
         },
@@ -1246,14 +1683,12 @@ function App() {
 
         const messages = replaceMessageId
           ? conversation.messages.map((message) => (message.id === replaceMessageId ? nextAssistantMessage : message))
-          : [
-            ...conversation.messages,
-            nextAssistantMessage,
-          ]
+          : [...conversation.messages, nextAssistantMessage]
 
         return {
           ...conversation,
           messages,
+          examPassage: generatedPassageText || conversation.examPassage,
           questionCount: nextQuestionNumber,
           updatedAt: Date.now(),
         }
@@ -1322,8 +1757,17 @@ function App() {
   }
 
   async function startNewConversation() {
+    if (isSupabaseConfigured && !session) {
+      setIsNewConversationModalOpen(false)
+      setScreen('auth')
+      return
+    }
+
     const trimmedTopic = newConversationTopic.trim()
-    const shouldUseExamMode = newConversationMode === 'exam' && Boolean(trimmedTopic)
+    const shouldUseExamMode = newConversationMode === 'exam'
+    const questionTarget = shouldUseExamMode && newConversationExamFlow === 'passage' ? 4 : 0
+    const examTitle = trimmedTopic
+      || (language === 'pt' ? examProfileLabel.pt[newConversationExamProfile] : examProfileLabel.en[newConversationExamProfile])
 
     const pendingQuestionMessageId = `pending-${Date.now()}`
 
@@ -1331,8 +1775,11 @@ function App() {
       mode: shouldUseExamMode ? 'exam' : 'chat',
       topic: shouldUseExamMode ? trimmedTopic : '',
       difficulty: shouldUseExamMode ? newConversationDifficulty : 'auto',
+      examProfile: shouldUseExamMode ? newConversationExamProfile : 'general',
+      examFlow: shouldUseExamMode ? newConversationExamFlow : 'single',
+      examQuestionTarget: shouldUseExamMode ? questionTarget : 0,
       title: shouldUseExamMode
-        ? getConversationTitle(trimmedTopic)
+        ? getConversationTitle(examTitle)
         : '',
     })
 
@@ -1344,9 +1791,9 @@ function App() {
             id: pendingQuestionMessageId,
             role: 'assistant',
             responseType: 'text',
-            text: language === 'pt'
-              ? 'Gerando a primeira questao da prova...'
-              : 'Generating the first exam question...',
+            text: shouldUseExamMode && newConversationExamFlow === 'passage'
+              ? (language === 'pt' ? 'Gerando texto-base e primeira questao...' : 'Generating base passage and first question...')
+              : (language === 'pt' ? 'Gerando a primeira questao da prova...' : 'Generating the first exam question...'),
           },
         ],
       }
@@ -1359,6 +1806,8 @@ function App() {
     setIsNewConversationModalOpen(false)
     setNewConversationTopic('')
     setNewConversationMode('chat')
+    setNewConversationExamProfile('general')
+    setNewConversationExamFlow('single')
     setNewConversationDifficulty('auto')
 
   }
@@ -1547,7 +1996,7 @@ function App() {
                     onClick={() => {
                       setActiveConversationId(conversation.id)
                       setDraft('')
-                      setScreen('chat')
+                      goToChatWithAuthGate()
                     }}
                     className="glass-card w-full min-w-0 rounded-[20px] border border-[color:var(--card-border)] bg-transparent p-2 text-left transition hover:-translate-y-0.5"
                   >
@@ -1581,7 +2030,7 @@ function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        setScreen('chat')
+                        goToChatWithAuthGate()
                       }}
                       className="accent-aura accent-button rounded-full px-3 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5"
                     >
@@ -1591,11 +2040,20 @@ function App() {
                       type="button"
                       onClick={() => {
                         setDraft(t.quickPrompts[1])
-                        setScreen('chat')
+                        goToChatWithAuthGate()
                       }}
                       className="rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-sm font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 hover:border-[color:var(--accent-line)]"
                     >
                       {t.secondaryCta}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setScreen('auth')}
+                      className="rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-sm font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 hover:border-[color:var(--accent-line)]"
+                    >
+                      {session
+                        ? (language === 'pt' ? 'Conta conectada' : 'Account connected')
+                        : (language === 'pt' ? 'Entrar / criar conta' : 'Sign in / create account')}
                     </button>
                   </div>
 
@@ -1697,7 +2155,7 @@ function App() {
                       type="button"
                       onClick={() => {
                         void submitMessage(prompt)
-                        setScreen('chat')
+                        goToChatWithAuthGate()
                       }}
                       className="glass-card rounded-[22px] p-2 text-left text-sm leading-6 text-[color:var(--text-soft)] transition hover:-translate-y-0.5 hover:text-[color:var(--text-main)]"
                     >
@@ -1708,6 +2166,78 @@ function App() {
               </div>
             </section>
           </>
+        ) : screen === 'auth' ? (
+          <div className="flex min-h-[calc(100dvh-1rem)] items-center justify-center">
+          <section className="mx-auto w-full max-w-lg glass-panel rounded-[28px] p-3 sm:p-4">
+            <h2 className="font-['Space_Grotesk'] text-[1.5rem] font-bold text-[color:var(--text-main)]">
+              {language === 'pt' ? 'Entrar na sua conta' : 'Sign in to your account'}
+            </h2>
+            <p className="mt-1 text-sm text-[color:var(--text-muted)]">
+              {language === 'pt'
+                ? 'Crie conta ou entre para liberar o chat. Plano free usa dados locais; plano pro ativa nuvem.'
+                : 'Create an account or sign in to unlock chat. Free plan uses local data; pro enables cloud sync.'}
+            </p>
+
+            {!isSupabaseConfigured ? (
+              <p className="mt-3 text-sm text-[color:var(--text-muted)]">
+                {language === 'pt'
+                  ? 'Supabase ainda nao configurado neste ambiente. Defina VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.'
+                  : 'Supabase is not configured in this environment. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.'}
+              </p>
+            ) : (
+              <div className="mt-3 grid gap-2">
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                  placeholder={language === 'pt' ? 'Seu email' : 'Your email'}
+                  className="rounded-[12px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
+                />
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  placeholder={language === 'pt' ? 'Sua senha' : 'Your password'}
+                  className="rounded-[12px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
+                />
+                {authError ? <p className="text-xs text-[color:var(--text-muted)]">{authError}</p> : null}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={isAuthBusy}
+                    onClick={() => { void signInWithGoogle() }}
+                    className="rounded-full border border-[color:var(--card-border)] px-3 py-2 text-sm text-[color:var(--text-main)] disabled:opacity-60"
+                  >
+                    {language === 'pt' ? 'Entrar com Google' : 'Sign in with Google'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isAuthBusy}
+                    onClick={() => { void signInWithEmail() }}
+                    className="accent-button rounded-full px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {language === 'pt' ? 'Entrar' : 'Sign in'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isAuthBusy}
+                    onClick={() => { void signUpWithEmail() }}
+                    className="rounded-full border border-[color:var(--card-border)] px-3 py-2 text-sm text-[color:var(--text-main)] disabled:opacity-60"
+                  >
+                    {language === 'pt' ? 'Criar conta' : 'Create account'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScreen('landing')}
+                    className="rounded-full border border-[color:var(--card-border)] px-3 py-2 text-sm text-[color:var(--text-main)]"
+                  >
+                    {language === 'pt' ? 'Voltar' : 'Back'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+          </div>
         ) : (
           <>
           <div className={[
@@ -1735,6 +2265,15 @@ function App() {
               <div className="flex items-center gap-2 sm:gap-3">
                 <button
                   type="button"
+                  onClick={() => setScreen('auth')}
+                  className="inline-flex items-center rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-xs font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 sm:text-sm"
+                >
+                  {session
+                    ? (language === 'pt' ? 'Conta' : 'Account')
+                    : (language === 'pt' ? 'Entrar' : 'Sign in')}
+                </button>
+                <button
+                  type="button"
                   onClick={() => setScreen('landing')}
                    className="hidden items-center gap-2 rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-sm font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 lg:inline-flex"
                 >
@@ -1748,8 +2287,28 @@ function App() {
               </div>
             </div>
 
-            <div className="app-scroll mt-2 flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto pr-1 sm:mt-3 lg:mt-4">
-              {messages.map((message) => (
+            <div className="mt-2 min-h-0 flex-1 overflow-hidden sm:mt-3 lg:mt-4">
+              <div className="mx-auto flex h-full min-h-0 w-full max-w-[980px] flex-col overflow-hidden lg:flex-row lg:gap-2">
+                {showStickyPassagePanel ? (
+                  <aside className="glass-card hidden w-[350px] shrink-0 overflow-hidden rounded-[14px] border border-[color:var(--card-border)] bg-transparent p-2 lg:flex lg:flex-col">
+                    <p className="font-['IBM_Plex_Mono'] text-[0.66rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
+                      {language === 'pt' ? 'Texto-base' : 'Base passage'}
+                    </p>
+                    <div className="app-scroll mt-2 flex-1 overflow-y-auto text-sm leading-6 text-[color:var(--text-soft)]">
+                      <ReactMarkdown components={markdownComponents}>{activeConversation?.examPassage ?? ''}</ReactMarkdown>
+                    </div>
+                  </aside>
+                ) : null}
+
+                <div className={[
+                  'min-h-0 flex flex-col overflow-hidden',
+                  showStickyPassagePanel ? 'flex-1 lg:min-w-0' : 'flex-1',
+                ].join(' ')}>
+                <div className={[
+                  'app-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto',
+                  showStickyPassagePanel ? 'items-start' : 'items-center',
+                ].join(' ')}>
+              {visibleMessages.map((message) => (
                 <div
                   key={message.id}
                   className={[
@@ -1759,7 +2318,7 @@ function App() {
                 >
                 <article
                   className={[
-                    'glass-card rounded-[24px] p-2',
+                    'glass-card rounded-[14px] p-2',
                     message.role === 'user'
                       ? 'w-fit max-w-[84%] bg-[linear-gradient(180deg,rgba(31,59,138,0.42),rgba(13,24,64,0.24))] lg:max-w-[760px]'
                       : 'w-full',
@@ -1927,21 +2486,26 @@ function App() {
                 </div>
               ))}
 
-              {isLoading ? (
+              {isLoading && !hasPendingExamMessage ? (
                 <div className="flex w-full max-w-[700px] justify-start">
-                  <article className="glass-card w-full rounded-[24px] p-2">
+                  <article className="glass-card w-full rounded-[14px] p-2">
                     <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
                       Mentor AI
                     </span>
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[color:var(--text-soft)] sm:text-[0.97rem]">
-                      {language === 'pt' ? 'Pensando na melhor resposta...' : 'Thinking about the best response...'}
+                      {activeConversation?.mode === 'exam'
+                        ? (language === 'pt' ? 'Gerando proxima questao...' : 'Generating next question...')
+                        : (language === 'pt' ? 'Pensando na melhor resposta...' : 'Thinking about the best response...')}
                     </p>
                   </article>
                 </div>
               ) : null}
-            </div>
+              </div>
 
-            <form onSubmit={handleSubmit} className="mt-2 flex justify-center">
+            <form onSubmit={handleSubmit} className={[
+              'mt-2 flex',
+              showStickyPassagePanel ? 'justify-start' : 'justify-center',
+            ].join(' ')}>
               <div className="glass-card w-full max-w-[700px] rounded-[13px] p-2 sm:p-2">
                 <div className="flex items-end gap-2">
                   <textarea
@@ -1967,6 +2531,9 @@ function App() {
                 </div>
               </div>
             </form>
+                </div>
+              </div>
+            </div>
           </section>
 
           <section className="relative hidden min-h-0 lg:order-1 lg:block">
@@ -2065,6 +2632,97 @@ function App() {
                       </button>
                     ))}
                   </div>
+                </section>
+
+                <section className="mt-2 rounded-[20px] border border-[color:var(--card-border)] bg-transparent p-2">
+                  <span className="section-label">{language === 'pt' ? 'Conta e nuvem' : 'Account & cloud'}</span>
+
+                  {!isSupabaseConfigured ? (
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--text-muted)]">
+                      {language === 'pt'
+                        ? 'Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY para ativar login.'
+                        : 'Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to enable auth.'}
+                    </p>
+                  ) : session ? (
+                    <div className="mt-2 grid gap-2">
+                      <p className="text-sm text-[color:var(--text-main)]">{session.user.email}</p>
+                      <p className="text-xs text-[color:var(--text-muted)]">
+                        {userPlan === 'pro'
+                          ? (isCloudSyncEnabled
+                              ? (language === 'pt' ? 'Sincronizacao ativa' : 'Cloud sync enabled')
+                              : (language === 'pt' ? 'Sincronizacao pausada' : 'Cloud sync paused'))
+                          : (language === 'pt' ? 'Plano free: dados locais (sem nuvem)' : 'Free plan: local data only (no cloud sync)')}
+                        {cloudSyncTimeText
+                          ? ` • ${language === 'pt' ? 'Ultimo sync' : 'Last sync'}: ${cloudSyncTimeText}`
+                          : ''}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={userPlan !== 'pro'}
+                          onClick={() => setIsCloudSyncEnabled((current) => !current)}
+                          className="rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs text-[color:var(--text-main)] disabled:opacity-60"
+                        >
+                          {isCloudSyncEnabled
+                            ? (language === 'pt' ? 'Pausar nuvem' : 'Pause cloud')
+                            : (language === 'pt' ? 'Ativar nuvem' : 'Enable cloud')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { void signOutFromCloud() }}
+                          className="rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs text-[color:var(--text-main)]"
+                        >
+                          {language === 'pt' ? 'Sair' : 'Sign out'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 grid gap-2">
+                      <input
+                        type="email"
+                        value={authEmail}
+                        onChange={(event) => setAuthEmail(event.target.value)}
+                        placeholder={language === 'pt' ? 'Seu email' : 'Your email'}
+                        className="rounded-[12px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
+                      />
+                      <input
+                        type="password"
+                        value={authPassword}
+                        onChange={(event) => setAuthPassword(event.target.value)}
+                        placeholder={language === 'pt' ? 'Sua senha' : 'Your password'}
+                        className="rounded-[12px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
+                      />
+                      {authError ? (
+                        <p className="text-xs text-[color:var(--text-muted)]">{authError}</p>
+                      ) : null}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={isAuthBusy}
+                          onClick={() => { void signInWithGoogle() }}
+                          className="rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs text-[color:var(--text-main)] disabled:opacity-60"
+                        >
+                          {language === 'pt' ? 'Google' : 'Google'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isAuthBusy}
+                          onClick={() => { void signInWithEmail() }}
+                          className="rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs text-[color:var(--text-main)] disabled:opacity-60"
+                        >
+                          {language === 'pt' ? 'Entrar' : 'Sign in'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isAuthBusy}
+                          onClick={() => { void signUpWithEmail() }}
+                          className="rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs text-[color:var(--text-main)] disabled:opacity-60"
+                        >
+                          {language === 'pt' ? 'Criar conta' : 'Create account'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </section>
               </aside>
             </div>
@@ -2173,8 +2831,8 @@ function App() {
             </h2>
             <p className="mt-1 text-sm text-[color:var(--text-muted)]">
               {language === 'pt'
-                ? 'Escolha o tipo de conversa. No modo prova, defina assunto e dificuldade.'
-                : 'Choose conversation type. In exam mode, define topic and difficulty.'}
+                ? 'No modo prova, voce pode escolher perfil, formato e dificuldade. O assunto e opcional.'
+                : 'In exam mode, you can choose profile, format, and difficulty. Topic is optional.'}
             </p>
 
             <div className="mt-3 grid gap-2">
@@ -2202,6 +2860,38 @@ function App() {
                 placeholder={language === 'pt' ? 'Ex.: Historia de Portugal' : 'e.g. History of Portugal'}
                 className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none"
               />
+            </div>
+
+            <div className="mt-3 grid gap-2">
+              <label className="text-xs uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
+                {language === 'pt' ? 'Perfil da prova' : 'Exam profile'}
+              </label>
+              <select
+                value={newConversationExamProfile}
+                onChange={(event) => setNewConversationExamProfile(event.target.value as ExamProfile)}
+                disabled={newConversationMode !== 'exam'}
+                className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none disabled:opacity-60"
+              >
+                {(['general', 'enem'] as const).map((profile) => (
+                  <option key={profile} value={profile}>{examProfileLabel[language][profile]}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mt-3 grid gap-2">
+              <label className="text-xs uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
+                {language === 'pt' ? 'Formato da prova' : 'Exam format'}
+              </label>
+              <select
+                value={newConversationExamFlow}
+                onChange={(event) => setNewConversationExamFlow(event.target.value as ExamFlow)}
+                disabled={newConversationMode !== 'exam'}
+                className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none disabled:opacity-60"
+              >
+                {(['single', 'passage'] as const).map((flow) => (
+                  <option key={flow} value={flow}>{examFlowLabel[language][flow]}</option>
+                ))}
+              </select>
             </div>
 
             <div className="mt-3 grid gap-2">
@@ -2239,6 +2929,7 @@ function App() {
           </div>
         </div>
       ) : null}
+
     </div>
   )
 }
