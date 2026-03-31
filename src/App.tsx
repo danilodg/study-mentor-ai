@@ -60,6 +60,10 @@ interface Message {
   shortAnswer?: ShortAnswerActivity
   selectedOptionId?: QuizOptionId
   selectedTrueFalse?: boolean
+  retryAction?: 'chat' | 'exam'
+  retrySourceText?: string
+  retryQuestionNumber?: number
+  retryAt?: number
 }
 
 type QuizOptionId = 'A' | 'B' | 'C' | 'D'
@@ -514,7 +518,7 @@ function normalizeJsonText(text: string) {
 }
 
 function parseRetryDelayMs(errorMessage: string) {
-  const match = errorMessage.match(/Please retry in\s*([\d.]+)s/i)
+  const match = errorMessage.match(/(?:please\s+retry\s+in|retry\s+in|try\s+again\s+in|retrydelay[":=\s]*)([\d.]+)\s*(?:s|sec|seconds)?/i)
 
   if (!match) {
     return 0
@@ -537,6 +541,32 @@ function parseQuizOptionId(value: string | undefined): QuizOptionId | null {
     : null
 }
 
+function getQuestionOnlyHistory(conversation: Conversation, limit = 8) {
+  const extractedQuestions = conversation.messages
+    .filter((message) => message.role === 'assistant')
+    .map((message) => {
+      if (message.quiz?.question) {
+        return message.quiz.question
+      }
+
+      if (message.trueFalse?.statement) {
+        return message.trueFalse.statement
+      }
+
+      if (message.shortAnswer?.question) {
+        return message.shortAnswer.question
+      }
+
+      return ''
+    })
+    .map((question) => question.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+
+  return extractedQuestions
+    .slice(-limit)
+    .map((question) => (question.length > 220 ? `${question.slice(0, 220).trim()}...` : question))
+}
+
 function parseAssistantReply(rawText: string): AssistantReplyPayload {
   const normalizedRawText = normalizeJsonText(rawText)
 
@@ -554,7 +584,7 @@ function parseAssistantReply(rawText: string): AssistantReplyPayload {
 
           return {
             id: optionId,
-            text: option.text.trim(),
+            text: option.text.trim().replace(/\s+/g, ' '),
           } satisfies QuizOption
         })
         .filter(Boolean) as QuizOption[]
@@ -743,6 +773,7 @@ function App() {
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations)
   const [activeConversationId, setActiveConversationId] = useState<string>(storedChatState?.activeConversationId ?? initialConversations[0].id)
   const [isLoading, setIsLoading] = useState(false)
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const examGenerationRequestsRef = useRef<Set<string>>(new Set())
   const examBlockedUntilRef = useRef<Map<string, number>>(new Map())
 
@@ -790,6 +821,16 @@ function App() {
       void generateExamQuestion(activeConversation.id, 1, pendingMessage.id)
     }
   }, [activeConversation, isLoading])
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, 1000)
+
+    return () => {
+      window.clearInterval(timerId)
+    }
+  }, [])
 
   function getAssistantReply(text: string) {
     const normalized = text.toLowerCase()
@@ -932,6 +973,10 @@ function App() {
       }))
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : ''
+      const retryDelayMs = parseRetryDelayMs(errorMessage)
+      const retryAt = retryDelayMs > 0 ? Date.now() + retryDelayMs : undefined
+      const isRateLimitError = /quota exceeded|resource_exhausted|rate limit|too many requests/i.test(errorMessage)
+      const waitSeconds = retryDelayMs > 0 ? Math.ceil(retryDelayMs / 1000) : 0
 
       setConversations((current) => current.map((conversation) => {
         if (conversation.id !== conversationId) {
@@ -945,15 +990,119 @@ function App() {
             {
               id: `a-${Date.now() + 1}`,
               role: 'assistant',
-              text: [
-                getAssistantReply(value),
-                language === 'pt'
-                  ? 'Nao consegui consultar a Google AI agora.'
-                  : 'I could not reach Google AI right now.',
-                errorMessage,
-              ].filter(Boolean).join('\n\n'),
+              responseType: 'text',
+              text: isRateLimitError
+                ? (language === 'pt'
+                    ? `Limite da API atingido. ${waitSeconds > 0 ? `Tente novamente em ${waitSeconds}s.` : 'Tente novamente em instantes.'}`
+                    : `API limit reached. ${waitSeconds > 0 ? `Try again in ${waitSeconds}s.` : 'Please try again shortly.'}`)
+                : (language === 'pt'
+                    ? 'Nao consegui consultar a IA agora. Tente novamente.'
+                    : 'I could not reach AI right now. Please try again.'),
+              retryAction: 'chat',
+              retrySourceText: value,
+              retryAt,
             },
           ],
+          updatedAt: Date.now(),
+        }
+      }))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function retryAssistantMessage(message: Message) {
+    if (!activeConversation || isLoading || message.role !== 'assistant' || !message.retryAction) {
+      return
+    }
+
+    const remainingMs = (message.retryAt ?? 0) - Date.now()
+
+    if (remainingMs > 0) {
+      return
+    }
+
+    if (message.retryAction === 'exam') {
+      await generateExamQuestion(
+        activeConversation.id,
+        message.retryQuestionNumber ?? (activeConversation.questionCount + 1),
+        message.id,
+      )
+      return
+    }
+
+    const retryText = message.retrySourceText?.trim()
+
+    if (!retryText) {
+      return
+    }
+
+    try {
+      setIsLoading(true)
+
+      const assistantReply: AssistantReplyPayload = googleAiApiKey
+        ? await getGoogleAiReply(retryText)
+        : { responseType: 'text', text: getAssistantReply(retryText) }
+
+      setConversations((current) => current.map((conversation) => {
+        if (conversation.id !== activeConversation.id) {
+          return conversation
+        }
+
+        return {
+          ...conversation,
+          messages: conversation.messages.map((currentMessage) => {
+            if (currentMessage.id !== message.id) {
+              return currentMessage
+            }
+
+            return {
+              id: currentMessage.id,
+              role: 'assistant',
+              text: assistantReply.text,
+              responseType: assistantReply.responseType,
+              quiz: assistantReply.quiz,
+              trueFalse: assistantReply.trueFalse,
+              shortAnswer: assistantReply.shortAnswer,
+            }
+          }),
+          updatedAt: Date.now(),
+        }
+      }))
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : ''
+      const retryDelayMs = parseRetryDelayMs(errorMessage)
+      const waitSeconds = retryDelayMs > 0 ? Math.ceil(retryDelayMs / 1000) : 0
+      const retryAt = retryDelayMs > 0 ? Date.now() + retryDelayMs : undefined
+      const isRateLimitError = /quota exceeded|resource_exhausted|rate limit|too many requests/i.test(errorMessage)
+
+      setConversations((current) => current.map((conversation) => {
+        if (conversation.id !== activeConversation.id) {
+          return conversation
+        }
+
+        return {
+          ...conversation,
+          messages: conversation.messages.map((currentMessage) => {
+            if (currentMessage.id !== message.id) {
+              return currentMessage
+            }
+
+            return {
+              ...currentMessage,
+              responseType: 'text',
+              text: isRateLimitError
+                ? (language === 'pt'
+                    ? `Limite da API atingido. ${waitSeconds > 0 ? `Tente novamente em ${waitSeconds}s.` : 'Tente novamente em instantes.'}`
+                    : `API limit reached. ${waitSeconds > 0 ? `Try again in ${waitSeconds}s.` : 'Please try again shortly.'}`)
+                : (language === 'pt'
+                    ? 'Nao consegui consultar a IA agora. Tente novamente.'
+                    : 'I could not reach AI right now. Please try again.'),
+              retryAction: 'chat',
+              retrySourceText: retryText,
+              retryAt,
+            }
+          }),
           updatedAt: Date.now(),
         }
       }))
@@ -999,6 +1148,25 @@ function App() {
       return
     }
 
+    const recentQuestionHistory = getQuestionOnlyHistory(targetConversation)
+    const historyInstruction = recentQuestionHistory.length > 0
+      ? (
+        language === 'pt'
+          ? [
+            'Historico de perguntas recentes (somente enunciados):',
+            ...recentQuestionHistory.map((question, index) => `${index + 1}. ${question}`),
+            'Crie uma NOVA pergunta diferente das anteriores. Nao repita o enunciado nem variacoes superficiais.',
+            'Pode reaproveitar o tema geral, mas mude o foco/subtema.',
+          ].join(' ')
+          : [
+            'Recent question history (questions only):',
+            ...recentQuestionHistory.map((question, index) => `${index + 1}. ${question}`),
+            'Create a NEW question that is different from the previous ones. Do not repeat wording or superficial variations.',
+            'You may keep the overall topic, but change the focus/subtopic.',
+          ].join(' ')
+      )
+      : ''
+
     examGenerationRequestsRef.current.add(requestKey)
 
     try {
@@ -1017,6 +1185,7 @@ function App() {
               targetConversation.difficulty === 'auto'
                 ? 'Dificuldade: auto.'
                 : `Dificuldade: ${targetConversation.difficulty}.`,
+              historyInstruction,
             ].join(' ')
             : [
               'Exam context: return only quiz_mcq, true_false, or short_answer.',
@@ -1024,6 +1193,7 @@ function App() {
               targetConversation.difficulty === 'auto'
                 ? 'Difficulty: auto.'
                 : `Difficulty: ${targetConversation.difficulty}.`,
+              historyInstruction,
             ].join(' '),
         },
       )
@@ -1087,6 +1257,9 @@ function App() {
           role: 'assistant',
           responseType: 'text',
           text: fallbackText,
+          retryAction: 'exam',
+          retryQuestionNumber: nextQuestionNumber,
+          retryAt: retryDelayMs > 0 ? Date.now() + retryDelayMs : undefined,
         }
 
         if (replaceMessageId) {
@@ -1321,7 +1494,7 @@ function App() {
         {screen === 'landing' ? (
           <>
             <div className="pointer-events-none fixed left-4 top-24 z-20 hidden w-72 2xl:block">
-            <aside className="pointer-events-auto glass-panel max-h-[calc(100vh-8rem)] overflow-y-auto rounded-[28px] p-2 sm:p-3">
+            <aside className="pointer-events-auto glass-panel max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden rounded-[28px] p-2 sm:p-3">
               <span className="section-label">{language === 'pt' ? 'Selecione conversa' : 'Select conversation'}</span>
               <h2 className="mt-3 font-['Space_Grotesk'] text-[1.3rem] font-bold tracking-[-0.03em] text-[color:var(--text-main)]">
                 {language === 'pt' ? 'Conversas ja existentes' : 'Existing conversations'}
@@ -1335,7 +1508,7 @@ function App() {
                 {t.newChat}
               </button>
 
-              <div className="mt-5 grid gap-3">
+              <div className="mt-5 grid min-w-0 gap-3">
                 {conversationList.length > 0 ? conversationList.map((conversation, index) => (
                   <button
                     key={conversation.id}
@@ -1345,9 +1518,9 @@ function App() {
                       setDraft('')
                       setScreen('chat')
                     }}
-                    className="glass-card rounded-[20px] border border-[color:var(--card-border)] bg-transparent p-2 text-left transition hover:-translate-y-0.5"
+                    className="glass-card w-full min-w-0 rounded-[20px] border border-[color:var(--card-border)] bg-transparent p-2 text-left transition hover:-translate-y-0.5"
                   >
-                    <p className="truncate text-sm font-medium text-[color:var(--text-main)]">
+                    <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
                       {conversation.title || `${t.newChat} ${conversationList.length - index}`}
                     </p>
                   </button>
@@ -1530,7 +1703,7 @@ function App() {
               </div>
             </div>
 
-            <div className="app-scroll mt-4 grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1">
+            <div className="app-scroll mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
               {messages.map((message) => (
                 <article
                   key={message.id}
@@ -1576,9 +1749,7 @@ function App() {
                                 ].join(' ')}
                               >
                                 <span className="mr-2 font-['IBM_Plex_Mono'] text-[0.72rem] uppercase tracking-[0.12em] text-[color:var(--accent-soft)]">{option.id}</span>
-                                <span>
-                                  <ReactMarkdown components={markdownInlineComponents}>{option.text}</ReactMarkdown>
-                                </span>
+                                <span className="whitespace-pre-wrap break-words">{option.text}</span>
                               </button>
                             )
                           })}
@@ -1681,6 +1852,26 @@ function App() {
                   ) : (
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[color:var(--text-soft)] sm:text-[0.97rem]">{message.text}</p>
                   )}
+
+                  {message.retryAction ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void retryAssistantMessage(message)}
+                        disabled={isLoading || (message.retryAt ? message.retryAt > nowMs : false)}
+                        className="rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {language === 'pt' ? 'Tentar novamente' : 'Try again'}
+                      </button>
+                      {message.retryAt && message.retryAt > nowMs ? (
+                        <span className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
+                          {language === 'pt'
+                            ? `Disponivel em ${Math.ceil((message.retryAt - nowMs) / 1000)}s`
+                            : `Available in ${Math.ceil((message.retryAt - nowMs) / 1000)}s`}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </article>
               ))}
 
@@ -1743,18 +1934,18 @@ function App() {
                 </button>
               </div>
 
-              <div className="mt-5 grid gap-3">
+              <div className="mt-5 grid min-w-0 gap-3">
                 {conversationList.length > 0 ? conversationList.map((conversation, index) => (
                   <button
                     key={conversation.id}
                     type="button"
                     onClick={() => setActiveConversationId(conversation.id)}
                     className={[
-                      'glass-card w-full rounded-[24px] p-2 text-left',
+                      'glass-card w-full min-w-0 rounded-[24px] p-2 text-left',
                       conversation.id === activeConversationId ? 'border-[color:var(--accent-line)]/45' : '',
                     ].join(' ')}
                   >
-                    <p className="truncate text-sm font-medium text-[color:var(--text-main)]">
+                    <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
                       {conversation.title || `${t.newChat} ${conversationList.length - index}`}
                     </p>
                   </button>
