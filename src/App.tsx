@@ -776,6 +776,7 @@ function App() {
   const [activeConversationId, setActiveConversationId] = useState<string>(storedChatState?.activeConversationId ?? initialConversations[0].id)
   const [isLoading, setIsLoading] = useState(false)
   const [nowMs, setNowMs] = useState(() => Date.now())
+  const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const examGenerationRequestsRef = useRef<Set<string>>(new Set())
   const examBlockedUntilRef = useRef<Map<string, number>>(new Map())
 
@@ -839,6 +840,26 @@ function App() {
       window.clearInterval(timerId)
     }
   }, [])
+
+  function resizeDraftTextarea(element: HTMLTextAreaElement) {
+    element.style.height = 'auto'
+
+    const computed = window.getComputedStyle(element)
+    const lineHeight = Number.parseFloat(computed.lineHeight) || 24
+    const paddingTop = Number.parseFloat(computed.paddingTop) || 0
+    const paddingBottom = Number.parseFloat(computed.paddingBottom) || 0
+    const maxHeight = (lineHeight * 3) + paddingTop + paddingBottom
+    const nextHeight = Math.min(element.scrollHeight, maxHeight)
+
+    element.style.height = `${nextHeight}px`
+    element.style.overflowY = element.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }
+
+  useEffect(() => {
+    if (draftTextareaRef.current) {
+      resizeDraftTextarea(draftTextareaRef.current)
+    }
+  }, [draft])
 
   function getAssistantReply(text: string) {
     const normalized = text.toLowerCase()
@@ -1905,21 +1926,25 @@ function App() {
             </div>
 
             <form onSubmit={handleSubmit} className="mt-4 grid gap-2">
-              <div className="glass-card rounded-[26px] p-2 sm:p-2">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="glass-card rounded-[13px] p-2 sm:p-2">
+                <div className="flex items-end gap-2">
                   <textarea
+                    ref={draftTextareaRef}
                     value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
+                    onChange={(event) => {
+                      setDraft(event.target.value)
+                      resizeDraftTextarea(event.target)
+                    }}
                     rows={1}
                     disabled={isLoading}
                     placeholder={language === 'pt' ? 'Pergunte algo, peca um plano ou gere uma tarefa' : 'Ask something, request a plan, or generate a task'}
-                    className="h-12 flex-1 resize-none rounded-[22px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] px-2 py-2 text-[color:var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] disabled:cursor-not-allowed disabled:opacity-70 focus:border-[color:var(--accent-line)]"
+                    className="app-scroll min-h-12 min-w-0 flex-1 resize-none rounded-[11px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] px-2 py-2 leading-6 text-[color:var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] [&::placeholder]:overflow-hidden [&::placeholder]:text-ellipsis [&::placeholder]:whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-70 focus:border-[color:var(--accent-line)]"
                   />
                   <button
                     type="submit"
                     disabled={isLoading}
                     aria-label={language === 'pt' ? 'Enviar mensagem' : 'Send message'}
-                    className="accent-button inline-flex h-12 w-12 items-center justify-center rounded-full text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="accent-button inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     <ArrowUp size={16} />
                   </button>
