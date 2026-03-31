@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Languages,
   MoonStar,
+  PanelLeft,
   Search,
   Sparkles,
   SunMedium,
@@ -769,6 +770,7 @@ function App() {
   const [newConversationTopic, setNewConversationTopic] = useState('')
   const [newConversationDifficulty, setNewConversationDifficulty] = useState<DifficultyLevel>('auto')
   const [screen, setScreen] = useState<Screen>('landing')
+  const [isMobileConversationMenuOpen, setIsMobileConversationMenuOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations)
   const [activeConversationId, setActiveConversationId] = useState<string>(storedChatState?.activeConversationId ?? initialConversations[0].id)
@@ -821,6 +823,12 @@ function App() {
       void generateExamQuestion(activeConversation.id, 1, pendingMessage.id)
     }
   }, [activeConversation, isLoading])
+
+  useEffect(() => {
+    if (screen !== 'chat') {
+      setIsMobileConversationMenuOpen(false)
+    }
+  }, [screen])
 
   useEffect(() => {
     const timerId = window.setInterval(() => {
@@ -1678,20 +1686,29 @@ function App() {
             </section>
           </>
         ) : (
-          <div className="grid gap-2 lg:h-[calc(100vh-2rem)] lg:grid-cols-[minmax(360px,0.62fr)_minmax(0,1.78fr)] lg:overflow-hidden">
+          <>
+          <div className="grid h-[calc(100dvh-1rem)] gap-2 overflow-hidden lg:h-[calc(100vh-2rem)] lg:grid-cols-[minmax(360px,0.62fr)_minmax(0,1.78fr)] lg:overflow-hidden">
           <section className="glass-panel lg:order-2 flex min-h-0 flex-col rounded-[28px] px-2 pb-2 pt-2 sm:px-3 sm:pb-3 sm:pt-3 lg:px-3 lg:pb-3 lg:pt-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--panel-border)] pb-2">
-              <div>
-                <span className="section-label">{t.brandLabel}</span>
-                <h2 className="mt-3 font-['Space_Grotesk'] text-[1.7rem] font-bold tracking-[-0.04em] text-[color:var(--text-main)]">
+            <div className="flex items-center gap-2 border-b border-[color:var(--panel-border)] pb-1.5 sm:pb-2">
+              <button
+                type="button"
+                onClick={() => setIsMobileConversationMenuOpen(true)}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[color:var(--card-border)] bg-transparent text-[color:var(--text-main)] transition hover:-translate-y-0.5 lg:hidden"
+                aria-label={language === 'pt' ? 'Abrir conversas' : 'Open conversations'}
+              >
+                <PanelLeft size={16} />
+              </button>
+              <div className="min-w-0 flex-1">
+                <span className="section-label hidden lg:inline-flex">{t.brandLabel}</span>
+                <h2 className="truncate font-['Space_Grotesk'] text-[1.06rem] font-bold tracking-[-0.03em] text-[color:var(--text-main)] sm:text-[1.2rem] lg:mt-2 lg:text-[1.7rem] lg:tracking-[-0.04em]">
                   {t.workspaceTitle}
                 </h2>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => setScreen('landing')}
-                   className="inline-flex items-center gap-2 rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-sm font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5"
+                   className="hidden items-center gap-2 rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-sm font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 lg:inline-flex"
                 >
                   <ArrowLeft size={16} />
                   {language === 'pt' ? 'Voltar' : 'Back'}
@@ -1703,7 +1720,7 @@ function App() {
               </div>
             </div>
 
-            <div className="app-scroll mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+            <div className="app-scroll mt-2 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1 sm:mt-3 lg:mt-4">
               {messages.map((message) => (
                 <article
                   key={message.id}
@@ -1887,26 +1904,23 @@ function App() {
               ) : null}
             </div>
 
-            <form onSubmit={handleSubmit} className="mt-4 grid gap-3">
-              <label className="font-['IBM_Plex_Mono'] text-[0.72rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
-                {t.inputLabel}
-              </label>
+            <form onSubmit={handleSubmit} className="mt-4 grid gap-2">
               <div className="glass-card rounded-[26px] p-2 sm:p-2">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                   <textarea
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
-                    rows={3}
+                    rows={1}
                     disabled={isLoading}
-                    placeholder={t.inputPlaceholder}
-                    className="min-h-[84px] flex-1 resize-none rounded-[22px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] px-2 py-2 text-[color:var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] disabled:cursor-not-allowed disabled:opacity-70 focus:border-[color:var(--accent-line)]"
+                    placeholder={language === 'pt' ? 'Pergunte algo, peca um plano ou gere uma tarefa' : 'Ask something, request a plan, or generate a task'}
+                    className="h-12 flex-1 resize-none rounded-[22px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] px-2 py-2 text-[color:var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] disabled:cursor-not-allowed disabled:opacity-70 focus:border-[color:var(--accent-line)]"
                   />
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="accent-button inline-flex h-14 items-center justify-center gap-2 rounded-full px-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
+                    aria-label={language === 'pt' ? 'Enviar mensagem' : 'Send message'}
+                    className="accent-button inline-flex h-12 w-12 items-center justify-center rounded-full text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {isLoading ? (language === 'pt' ? 'Enviando...' : 'Sending...') : t.send}
                     <ArrowUp size={16} />
                   </button>
                 </div>
@@ -1914,7 +1928,7 @@ function App() {
             </form>
           </section>
 
-          <section className="glass-panel lg:order-1 flex min-h-0 flex-col rounded-[28px] px-2 pb-2 pt-2 sm:px-3 sm:pb-3 sm:pt-3">
+          <section className="glass-panel hidden min-h-0 flex-col rounded-[28px] px-2 pb-2 pt-2 sm:px-3 sm:pb-3 sm:pt-3 lg:order-1 lg:flex">
             <div className="app-scroll min-h-0 flex-1 overflow-y-auto pr-1">
             <section className="rounded-[24px] border border-[color:var(--card-border)] bg-transparent p-2 sm:p-3">
               <div className="flex items-start justify-between gap-2">
@@ -2047,7 +2061,7 @@ function App() {
             </section>
             </div>
 
-            <div className="mt-4 flex justify-center lg:hidden">
+            <div className="mt-4 hidden justify-center lg:hidden">
               <div className="glass-card inline-flex items-center gap-2 rounded-full p-1 text-xs text-[color:var(--text-muted)]">
                 <span className="px-3 font-['IBM_Plex_Mono'] uppercase tracking-[0.14em]">{t.language}</span>
                 <div className="relative grid grid-cols-2 items-center rounded-full border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-1">
@@ -2075,8 +2089,101 @@ function App() {
                 </div>
               </div>
             </div>
+
           </section>
         </div>
+
+        {isMobileConversationMenuOpen ? (
+          <div
+            className="fixed inset-0 z-40 bg-black/45 lg:hidden"
+            onClick={() => setIsMobileConversationMenuOpen(false)}
+          >
+            <aside
+              className="glass-panel app-scroll absolute inset-y-0 left-0 flex w-[88%] max-w-sm flex-col overflow-y-auto rounded-r-[28px] p-3"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-2 border-b border-[color:var(--panel-border)] pb-3">
+                <button
+                  type="button"
+                  onClick={() => setIsMobileConversationMenuOpen(false)}
+                  className="inline-flex items-center gap-2 rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)]"
+                >
+                  <ArrowLeft size={14} />
+                  {language === 'pt' ? 'Voltar' : 'Back'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScreen('landing')
+                    setIsMobileConversationMenuOpen(false)
+                  }}
+                  className="inline-flex items-center rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)]"
+                >
+                  {language === 'pt' ? 'Inicio' : 'Home'}
+                </button>
+              </div>
+
+              <section className="mt-3 rounded-[24px] border border-[color:var(--card-border)] p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="section-label">{language === 'pt' ? 'Conversas' : 'Conversations'}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openNewConversationModal()
+                      setIsMobileConversationMenuOpen(false)
+                    }}
+                    className="inline-flex items-center rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)]"
+                  >
+                    {t.newChat}
+                  </button>
+                </div>
+
+                <div className="mt-3 grid min-w-0 gap-2">
+                  {conversationList.map((conversation, index) => (
+                    <button
+                      key={conversation.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveConversationId(conversation.id)
+                        setIsMobileConversationMenuOpen(false)
+                      }}
+                      className={[
+                        'glass-card w-full min-w-0 rounded-[18px] p-2 text-left',
+                        conversation.id === activeConversationId ? 'border-[color:var(--accent-line)]/45' : '',
+                      ].join(' ')}
+                    >
+                      <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
+                        {conversation.title || `${t.newChat} ${conversationList.length - index}`}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="mt-2 rounded-[24px] border border-[color:var(--card-border)] p-2">
+                <span className="section-label">{language === 'pt' ? 'Tipo de resposta' : 'Response type'}</span>
+                <div className="mt-2 grid gap-2">
+                  {responseModeOptions.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setResponseMode(mode)}
+                      className={[
+                        'rounded-[14px] border px-2 py-2 text-left text-sm',
+                        responseMode === mode
+                          ? 'border-[color:var(--accent-line)]/55 bg-[color:var(--input-bg)] text-[color:var(--text-main)]'
+                          : 'border-[color:var(--card-border)] bg-transparent text-[color:var(--text-soft)]',
+                      ].join(' ')}
+                    >
+                      {responseModeLabel[language][mode]}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </aside>
+          </div>
+        ) : null}
+          </>
         )}
       </main>
 
