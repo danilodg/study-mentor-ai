@@ -1709,7 +1709,7 @@ function App() {
         ) : (
           <>
           <div className="grid h-[calc(100dvh-1rem)] gap-2 overflow-hidden lg:h-[calc(100vh-2rem)] lg:grid-cols-[minmax(360px,0.62fr)_minmax(0,1.78fr)] lg:overflow-hidden">
-          <section className="glass-panel lg:order-2 flex min-h-0 flex-col rounded-[28px] px-2 pb-2 pt-2 sm:px-3 sm:pb-3 sm:pt-3 lg:px-3 lg:pb-3 lg:pt-3">
+          <section className="lg:glass-panel lg:order-2 flex min-h-0 flex-col px-0 pb-0 pt-0 sm:px-0 sm:pb-0 sm:pt-0 lg:rounded-[28px] lg:px-3 lg:pb-3 lg:pt-3">
             <div className="flex items-center gap-2 border-b border-[color:var(--panel-border)] pb-1.5 sm:pb-2">
               <button
                 type="button"
@@ -1925,7 +1925,7 @@ function App() {
               ) : null}
             </div>
 
-            <form onSubmit={handleSubmit} className="mt-4 grid gap-2">
+            <form onSubmit={handleSubmit} className="mt-2 grid gap-2">
               <div className="glass-card rounded-[13px] p-2 sm:p-2">
                 <div className="flex items-end gap-2">
                   <textarea
