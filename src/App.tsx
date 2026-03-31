@@ -5,12 +5,9 @@ import {
   ArrowUp,
   BookOpenText,
   BrainCircuit,
-  CheckCircle2,
   ClipboardList,
-  Languages,
   MoonStar,
   PanelLeft,
-  Search,
   Sparkles,
   SunMedium,
 } from 'lucide-react'
@@ -771,6 +768,8 @@ function App() {
   const [newConversationDifficulty, setNewConversationDifficulty] = useState<DifficultyLevel>('auto')
   const [screen, setScreen] = useState<Screen>('landing')
   const [isMobileConversationMenuOpen, setIsMobileConversationMenuOpen] = useState(false)
+  const [isDesktopSidebarPinned, setIsDesktopSidebarPinned] = useState(false)
+  const [isDesktopSidebarHovered, setIsDesktopSidebarHovered] = useState(false)
   const [draft, setDraft] = useState('')
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations)
   const [activeConversationId, setActiveConversationId] = useState<string>(storedChatState?.activeConversationId ?? initialConversations[0].id)
@@ -791,6 +790,7 @@ function App() {
     [activeConversationId, conversations],
   )
   const messages = activeConversation?.messages ?? []
+  const isDesktopSidebarOpen = isDesktopSidebarPinned || isDesktopSidebarHovered
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -828,6 +828,8 @@ function App() {
   useEffect(() => {
     if (screen !== 'chat') {
       setIsMobileConversationMenuOpen(false)
+      setIsDesktopSidebarPinned(false)
+      setIsDesktopSidebarHovered(false)
     }
   }, [screen])
 
@@ -1708,7 +1710,12 @@ function App() {
           </>
         ) : (
           <>
-          <div className="grid h-[calc(100dvh-1rem)] gap-2 overflow-hidden lg:h-[calc(100vh-2rem)] lg:grid-cols-[minmax(360px,0.62fr)_minmax(0,1.78fr)] lg:overflow-hidden">
+          <div className={[
+            'grid h-[calc(100dvh-1rem)] gap-2 overflow-hidden lg:h-[calc(100vh-2rem)] lg:overflow-visible',
+            isDesktopSidebarPinned
+              ? 'lg:grid-cols-[420px_minmax(0,1fr)]'
+              : 'lg:grid-cols-[88px_minmax(0,1fr)]',
+          ].join(' ')}>
           <section className="lg:glass-panel lg:order-2 flex min-h-0 flex-col px-0 pb-0 pt-0 sm:px-0 sm:pb-0 sm:pt-0 lg:rounded-[28px] lg:px-3 lg:pb-3 lg:pt-3">
             <div className="flex items-center gap-2 border-b border-[color:var(--panel-border)] pb-1.5 sm:pb-2">
               <button
@@ -1741,15 +1748,21 @@ function App() {
               </div>
             </div>
 
-            <div className="app-scroll mt-2 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1 sm:mt-3 lg:mt-4">
+            <div className="app-scroll mt-2 flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto pr-1 sm:mt-3 lg:mt-4">
               {messages.map((message) => (
-                <article
+                <div
                   key={message.id}
                   className={[
-                    'glass-card w-fit rounded-[24px] p-2',
+                    'flex w-full max-w-[700px]',
+                    message.role === 'user' ? 'justify-end' : 'justify-start',
+                  ].join(' ')}
+                >
+                <article
+                  className={[
+                    'glass-card rounded-[24px] p-2',
                     message.role === 'user'
-                      ? 'ml-auto max-w-[760px] bg-[linear-gradient(180deg,rgba(31,59,138,0.42),rgba(13,24,64,0.24))]'
-                      : 'max-w-[820px]',
+                      ? 'w-fit max-w-[84%] bg-[linear-gradient(180deg,rgba(31,59,138,0.42),rgba(13,24,64,0.24))] lg:max-w-[760px]'
+                      : 'w-full',
                   ].join(' ')}
                 >
                   <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
@@ -1911,22 +1924,25 @@ function App() {
                     </div>
                   ) : null}
                 </article>
+                </div>
               ))}
 
               {isLoading ? (
-                <article className="glass-card w-fit max-w-[820px] rounded-[24px] p-2">
-                  <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
-                    Mentor AI
-                  </span>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[color:var(--text-soft)] sm:text-[0.97rem]">
-                    {language === 'pt' ? 'Pensando na melhor resposta...' : 'Thinking about the best response...'}
-                  </p>
-                </article>
+                <div className="flex w-full max-w-[700px] justify-start">
+                  <article className="glass-card w-full rounded-[24px] p-2">
+                    <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
+                      Mentor AI
+                    </span>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[color:var(--text-soft)] sm:text-[0.97rem]">
+                      {language === 'pt' ? 'Pensando na melhor resposta...' : 'Thinking about the best response...'}
+                    </p>
+                  </article>
+                </div>
               ) : null}
             </div>
 
-            <form onSubmit={handleSubmit} className="mt-2 grid gap-2">
-              <div className="glass-card rounded-[13px] p-2 sm:p-2">
+            <form onSubmit={handleSubmit} className="mt-2 flex justify-center">
+              <div className="glass-card w-full max-w-[700px] rounded-[13px] p-2 sm:p-2">
                 <div className="flex items-end gap-2">
                   <textarea
                     ref={draftTextareaRef}
@@ -1953,168 +1969,105 @@ function App() {
             </form>
           </section>
 
-          <section className="glass-panel hidden min-h-0 flex-col rounded-[28px] px-2 pb-2 pt-2 sm:px-3 sm:pb-3 sm:pt-3 lg:order-1 lg:flex">
-            <div className="app-scroll min-h-0 flex-1 overflow-y-auto pr-1">
-            <section className="rounded-[24px] border border-[color:var(--card-border)] bg-transparent p-2 sm:p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <span className="section-label">{language === 'pt' ? 'Conversas em andamento' : 'Ongoing conversations'}</span>
-                  <h2 className="mt-3 font-['Space_Grotesk'] text-[1.55rem] font-bold tracking-[-0.04em] text-[color:var(--text-main)]">
-                    {language === 'pt' ? 'Seu historico recente fica salvo no navegador.' : 'Your recent history stays saved in the browser.'}
-                  </h2>
-                </div>
+          <section className="relative hidden min-h-0 lg:order-1 lg:block">
+            <div
+              className="relative h-full"
+              onMouseEnter={() => setIsDesktopSidebarHovered(true)}
+              onMouseLeave={() => setIsDesktopSidebarHovered(false)}
+            >
+              <aside className="glass-panel flex h-full w-[88px] flex-col items-center rounded-[24px] px-2 py-3">
+                <button
+                  type="button"
+                  onClick={() => setIsDesktopSidebarPinned((current) => !current)}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-[color:var(--card-border)] bg-transparent text-[color:var(--text-main)] transition hover:-translate-y-0.5"
+                  aria-label={language === 'pt' ? 'Alternar menu lateral' : 'Toggle sidebar'}
+                >
+                  <PanelLeft size={17} />
+                </button>
+
                 <button
                   type="button"
                   onClick={openNewConversationModal}
                   disabled={isLoading}
-                  className="inline-flex items-center rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-xs font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="mt-2 inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-[color:var(--card-border)] bg-transparent font-['IBM_Plex_Mono'] text-lg text-[color:var(--text-main)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
+                  aria-label={language === 'pt' ? 'Nova conversa' : 'New chat'}
                 >
-                  {t.newChat}
+                  +
                 </button>
-              </div>
 
-              <div className="mt-5 grid min-w-0 gap-3">
-                {conversationList.length > 0 ? conversationList.map((conversation, index) => (
-                  <button
-                    key={conversation.id}
-                    type="button"
-                    onClick={() => setActiveConversationId(conversation.id)}
-                    className={[
-                      'glass-card w-full min-w-0 rounded-[24px] p-2 text-left',
-                      conversation.id === activeConversationId ? 'border-[color:var(--accent-line)]/45' : '',
-                    ].join(' ')}
-                  >
-                    <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
-                      {conversation.title || `${t.newChat} ${conversationList.length - index}`}
-                    </p>
-                  </button>
-                )) : (
-                  <article className="glass-card rounded-[24px] p-2 text-sm leading-6 text-[color:var(--text-muted)]">
-                    {language === 'pt'
-                      ? 'As mensagens que voce enviar vao aparecer aqui e continuarao salvas no navegador.'
-                      : 'The messages you send will appear here and remain saved in your browser.'}
-                  </article>
-                )}
-              </div>
-            </section>
+                <div className="mt-3 h-px w-10 bg-[color:var(--card-border)]" />
 
-            <section className="mt-2 rounded-[24px] border border-[color:var(--card-border)] bg-transparent p-2 sm:p-3">
-              <span className="section-label">{language === 'pt' ? 'Tipo de resposta' : 'Response type'}</span>
-              <div className="mt-2 grid gap-2">
-                {responseModeOptions.map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setResponseMode(mode)}
-                    className={[
-                      'rounded-[14px] border px-2 py-2 text-left text-sm transition hover:-translate-y-0.5',
-                      responseMode === mode
-                        ? 'border-[color:var(--accent-line)]/55 bg-[color:var(--input-bg)] text-[color:var(--text-main)]'
-                        : 'border-[color:var(--card-border)] bg-transparent text-[color:var(--text-soft)]',
-                    ].join(' ')}
-                  >
-                    {responseModeLabel[language][mode]}
-                  </button>
-                ))}
-              </div>
-            </section>
+                <span className="mt-2 font-['IBM_Plex_Mono'] text-[0.62rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
+                  {language === 'pt' ? 'Menu' : 'Menu'}
+                </span>
+              </aside>
 
-            <section className="mt-2 rounded-[24px] border border-[color:var(--card-border)] bg-transparent p-2 sm:p-3">
-              <span className="section-label">{t.progressTitle}</span>
-              <div className="mt-5 grid gap-3">
-                {[
-                  { icon: BookOpenText, title: t.insightTitle, items: t.insightList },
-                  { icon: Search, title: t.researchTitle, items: t.researchList },
-                ].map((block) => (
-                  <article key={block.title} className="glass-card rounded-[24px] p-2">
-                    <div className="mb-4 flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-[16px] bg-[color:var(--input-bg)] text-[color:var(--accent-soft)]">
-                        <block.icon size={17} />
-                      </div>
-                      <h3 className="font-['Space_Grotesk'] text-[1rem] font-bold tracking-[-0.03em] text-[color:var(--text-main)]">
-                        {block.title}
-                      </h3>
-                    </div>
-                    <ul className="grid gap-2">
-                      {block.items.map((item) => (
-                        <li key={item} className="flex items-center gap-2 text-sm text-[color:var(--text-soft)]">
-                          <CheckCircle2 size={15} className="text-[color:var(--accent-line)]" />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            <section className="mt-2 rounded-[24px] border border-[color:var(--card-border)] bg-transparent p-2 sm:p-3 lg:min-h-0">
-              <span className="section-label">Prompt shortcuts</span>
-              <div className="mt-5 grid gap-3">
-                {t.quickPrompts.map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    onClick={() => submitMessage(prompt)}
-                    className="glass-card rounded-[22px] p-2 text-left text-sm leading-6 text-[color:var(--text-soft)] transition hover:-translate-y-0.5 hover:text-[color:var(--text-main)]"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-3 rounded-[26px] border border-[color:var(--card-border)] bg-transparent p-2">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="accent-aura flex h-11 w-11 items-center justify-center rounded-[18px] accent-button text-white">
-                    <Languages size={18} />
+              <aside
+                className={[
+                  'glass-panel app-scroll absolute left-[96px] top-0 z-20 h-full w-[320px] overflow-y-auto rounded-[24px] p-3 transition-all duration-200',
+                  isDesktopSidebarOpen ? 'pointer-events-auto translate-x-0 opacity-100' : 'pointer-events-none -translate-x-2 opacity-0',
+                ].join(' ')}
+              >
+                <section className="rounded-[20px] border border-[color:var(--card-border)] bg-transparent p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="section-label">{language === 'pt' ? 'Conversas' : 'Conversations'}</span>
+                    <button
+                      type="button"
+                      onClick={openNewConversationModal}
+                      disabled={isLoading}
+                      className="inline-flex items-center rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {t.newChat}
+                    </button>
                   </div>
-                  <div>
-                    <p className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--accent-soft)]">
-                      {language === 'pt' ? 'Assistente de estudo' : 'Study assistant'}
-                    </p>
-                    <h3 className="font-['Space_Grotesk'] text-[1.05rem] font-bold tracking-[-0.03em] text-[color:var(--text-main)]">
-                      {language === 'pt' ? 'Pesquisa com resposta guiada' : 'Research with guided response'}
-                    </h3>
-                  </div>
-                </div>
-                <p className="text-sm leading-6 text-[color:var(--text-muted)]">
-                  {language === 'pt'
-                    ? 'O fluxo junta explicacao, checklist, sugestao de fontes e tarefas pequenas para voce aprender e pesquisar no mesmo ambiente.'
-                    : 'The flow combines explanation, checklist, source suggestions, and small tasks so learning and research happen in the same environment.'}
-                </p>
-              </div>
-            </section>
-            </div>
 
-            <div className="mt-4 hidden justify-center lg:hidden">
-              <div className="glass-card inline-flex items-center gap-2 rounded-full p-1 text-xs text-[color:var(--text-muted)]">
-                <span className="px-3 font-['IBM_Plex_Mono'] uppercase tracking-[0.14em]">{t.language}</span>
-                <div className="relative grid grid-cols-2 items-center rounded-full border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-1">
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.125rem)] rounded-full bg-[linear-gradient(135deg,var(--accent-start),var(--accent-mid)_55%,var(--accent-end))] shadow-[0_0_18px_var(--accent-shadow)] transition-transform duration-300 ease-out"
-                    style={{ transform: `translateX(${language === 'pt' ? '0%' : '100%'})` }}
-                  />
-                  {(['pt', 'en'] as const).map((option) => {
-                    const active = language === option
-
-                    return (
+                  <div className="mt-3 grid min-w-0 gap-2">
+                    {conversationList.length > 0 ? conversationList.map((conversation, index) => (
                       <button
-                        key={option}
+                        key={conversation.id}
                         type="button"
-                        onClick={() => switchLanguage(option)}
-                        className={active
-                          ? 'relative z-10 inline-flex h-8 items-center rounded-full px-3 font-medium text-white'
-                          : 'relative z-10 inline-flex h-8 items-center rounded-full px-3 transition hover:text-[color:var(--text-main)]'}
+                        onClick={() => setActiveConversationId(conversation.id)}
+                        className={[
+                          'glass-card w-full min-w-0 rounded-[18px] p-2 text-left',
+                          conversation.id === activeConversationId ? 'border-[color:var(--accent-line)]/45' : '',
+                        ].join(' ')}
                       >
-                        {option.toUpperCase()}
+                        <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
+                          {conversation.title || `${t.newChat} ${conversationList.length - index}`}
+                        </p>
                       </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
+                    )) : (
+                      <article className="glass-card rounded-[18px] p-2 text-sm leading-6 text-[color:var(--text-muted)]">
+                        {language === 'pt'
+                          ? 'As conversas vao aparecer aqui conforme voce usa o chat.'
+                          : 'Conversations appear here as you keep using the chat.'}
+                      </article>
+                    )}
+                  </div>
+                </section>
 
+                <section className="mt-2 rounded-[20px] border border-[color:var(--card-border)] bg-transparent p-2">
+                  <span className="section-label">{language === 'pt' ? 'Tipo de resposta' : 'Response type'}</span>
+                  <div className="mt-2 grid gap-2">
+                    {responseModeOptions.map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setResponseMode(mode)}
+                        className={[
+                          'rounded-[14px] border px-2 py-2 text-left text-sm transition hover:-translate-y-0.5',
+                          responseMode === mode
+                            ? 'border-[color:var(--accent-line)]/55 bg-[color:var(--input-bg)] text-[color:var(--text-main)]'
+                            : 'border-[color:var(--card-border)] bg-transparent text-[color:var(--text-soft)]',
+                        ].join(' ')}
+                      >
+                        {responseModeLabel[language][mode]}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              </aside>
+            </div>
           </section>
         </div>
 
