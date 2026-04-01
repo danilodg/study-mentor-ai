@@ -29,7 +29,7 @@ export function AuthScreen({
 }: AuthScreenProps) {
   return (
     <div className="flex min-h-[calc(100dvh-1rem)] items-center justify-center">
-      <section className="mx-auto w-full max-w-lg glass-panel rounded-[28px] p-3 sm:p-4">
+      <section className="mx-auto w-full max-w-lg glass-panel rounded-[10px] p-3 sm:p-4">
         <h2 className="font-['Space_Grotesk'] text-[1.5rem] font-bold text-[color:var(--text-main)]">
           {language === 'pt' ? 'Entrar na sua conta' : 'Sign in to your account'}
         </h2>
@@ -52,14 +52,14 @@ export function AuthScreen({
               value={authEmail}
               onChange={(event) => onAuthEmailChange(event.target.value)}
               placeholder={language === 'pt' ? 'Seu email' : 'Your email'}
-              className="rounded-[12px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
+              className="rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
             />
             <input
               type="password"
               value={authPassword}
               onChange={(event) => onAuthPasswordChange(event.target.value)}
               placeholder={language === 'pt' ? 'Sua senha' : 'Your password'}
-              className="rounded-[12px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
+              className="rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
             />
             {authError ? <p className="text-xs text-[color:var(--text-muted)]">{authError}</p> : null}
             <div className="mt-2 flex flex-wrap gap-2">

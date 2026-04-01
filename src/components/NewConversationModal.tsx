@@ -45,7 +45,7 @@ export function NewConversationModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-      <div className="glass-panel w-full max-w-xl rounded-[24px] p-3">
+      <div className="glass-panel w-full max-w-xl rounded-[10px] p-3">
         <h2 className="font-['Space_Grotesk'] text-[1.25rem] font-bold text-[color:var(--text-main)]">
           {language === 'pt' ? 'Nova conversa' : 'New conversation'}
         </h2>
@@ -62,7 +62,7 @@ export function NewConversationModal({
           <select
             value={mode}
             onChange={(event) => onModeChange(event.target.value as 'chat' | 'exam')}
-            className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none"
+            className="rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none"
           >
             {(['chat', 'exam'] as const).map((currentMode) => (
               <option key={currentMode} value={currentMode}>{conversationModeLabel[language][currentMode]}</option>
@@ -78,7 +78,7 @@ export function NewConversationModal({
             value={topic}
             onChange={(event) => onTopicChange(event.target.value)}
             placeholder={language === 'pt' ? 'Ex.: Historia de Portugal' : 'e.g. History of Portugal'}
-            className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none"
+            className="rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none"
           />
         </div>
 
@@ -90,7 +90,7 @@ export function NewConversationModal({
             value={examProfile}
             onChange={(event) => onExamProfileChange(event.target.value as 'general' | 'enem')}
             disabled={mode !== 'exam'}
-            className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none disabled:opacity-60"
+            className="rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none disabled:opacity-60"
           >
             {(['general', 'enem'] as const).map((profile) => (
               <option key={profile} value={profile}>{examProfileLabel[language][profile]}</option>
@@ -106,7 +106,7 @@ export function NewConversationModal({
             value={examFlow}
             onChange={(event) => onExamFlowChange(event.target.value as 'single' | 'passage')}
             disabled={mode !== 'exam'}
-            className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none disabled:opacity-60"
+            className="rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none disabled:opacity-60"
           >
             {(['single', 'passage'] as const).map((flow) => (
               <option key={flow} value={flow}>{examFlowLabel[language][flow]}</option>
@@ -122,7 +122,7 @@ export function NewConversationModal({
             value={difficulty}
             onChange={(event) => onDifficultyChange(event.target.value as 'auto' | 'easy' | 'medium' | 'hard')}
             disabled={mode !== 'exam'}
-            className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none disabled:opacity-60"
+            className="rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none disabled:opacity-60"
           >
             {(['auto', 'easy', 'medium', 'hard'] as const).map((level) => (
               <option key={level} value={level}>{difficultyLabel[language][level]}</option>

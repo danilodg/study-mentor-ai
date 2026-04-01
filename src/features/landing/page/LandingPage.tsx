@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '../../../context/AppContext'
 import { LandingScreen } from '../../../components/LandingScreen'
+import { getSessionDisplayName } from '../../../utils/user'
 
 export function LandingPage() {
   const navigate = useNavigate()
@@ -20,6 +21,7 @@ export function LandingPage() {
       language={app.language}
       t={app.t}
       sessionEmail={app.session?.user.email}
+      sessionDisplayName={getSessionDisplayName(app.session)}
       conversationList={conversationSummaries}
       onOpenNewConversation={app.openNewConversationModal}
       onSelectConversation={(conversationId) => {

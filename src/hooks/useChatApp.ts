@@ -22,6 +22,7 @@ import {
 import { isSupabaseConfigured, useAuth } from '../context/AuthContext'
 import { useChatDerived } from './useChatDerived'
 import { useCloudSync } from './useCloudSync'
+import { supabase } from '../lib/supabase'
 import type {
   AssistantReplyPayload,
   Conversation,
@@ -80,6 +81,7 @@ export function useChatApp() {
   const {
     session,
     userPlan,
+    setUserPlan,
     isCloudSyncEnabled,
     setIsCloudSyncEnabled,
     signInWithEmail,
@@ -88,7 +90,7 @@ export function useChatApp() {
     signOutFromCloud,
     authError,
     isAuthBusy,
-    setUserPlan,
+    setAuthError,
   } = useAuth()
   const [hasLoadedCloudState, setHasLoadedCloudState] = useState(false)
   const [lastCloudSyncAt, setLastCloudSyncAt] = useState<number | null>(null)
@@ -832,6 +834,60 @@ export function useChatApp() {
     }
   }
 
+  function deleteConversation(conversationId: string) {
+    setConversations((current) => {
+      const remaining = current.filter((conversation) => conversation.id !== conversationId)
+
+      if (remaining.length === 0) {
+        const freshConversation = createConversation()
+        setActiveConversationId(freshConversation.id)
+        return [freshConversation]
+      }
+
+      if (activeConversationId === conversationId) {
+        setActiveConversationId(remaining[0].id)
+      }
+
+      return remaining
+    })
+  }
+
+  async function setPlanWithCloudSync(plan: 'free' | 'pro') {
+    setUserPlan(plan)
+
+    const shouldEnableCloudSync = plan === 'pro' && Boolean(session)
+    setIsCloudSyncEnabled(shouldEnableCloudSync)
+
+    if (!session?.user.id || !supabase) {
+      return
+    }
+
+    const payload: { user_id: string; plan_code: 'free' | 'pro'; updated_at: string; state?: StoredChatState } = {
+      user_id: session.user.id,
+      plan_code: plan,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (plan === 'pro') {
+      payload.state = currentStoredState
+    }
+
+    const { error } = await supabase
+      .from('user_workspace_states')
+      .upsert(payload, {
+        onConflict: 'user_id',
+      })
+
+    if (error) {
+      setAuthError(error.message)
+      return
+    }
+
+    if (plan === 'pro') {
+      setLastCloudSyncAt(Date.now())
+    }
+  }
+
   return {
     theme,
     setTheme,
@@ -864,9 +920,12 @@ export function useChatApp() {
     conversations,
     activeConversationId,
     setActiveConversationId,
+    deleteConversation,
     isLoading,
     session,
     userPlan,
+    setUserPlan,
+    setPlanWithCloudSync,
     isCloudSyncEnabled,
     setIsCloudSyncEnabled,
     signInWithEmail,

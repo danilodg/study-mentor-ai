@@ -33,3 +33,11 @@ export {
   getQuestionPrompt,
   getTopicInstruction,
 } from './runtime'
+
+export {
+  getProfilePlansCopy,
+} from './plans'
+
+export type {
+  ProfilePlansCopy,
+} from './plans'

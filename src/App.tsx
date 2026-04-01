@@ -57,7 +57,7 @@ function AppRoutes() {
         <button
           type="button"
           onClick={() => app.setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
-          className="pointer-events-auto group flex h-14 w-14 items-center overflow-hidden rounded-[20px] border border-[color:var(--panel-border)] accent-button text-white transition-[width,transform] duration-300 ease-out hover:w-36 hover:-translate-y-0.5"
+          className="pointer-events-auto group flex h-14 w-14 items-center overflow-hidden rounded-[10px] border border-[color:var(--panel-border)] accent-button text-white transition-[width,transform] duration-300 ease-out hover:w-36 hover:-translate-y-0.5"
           aria-label={app.t.theme}
         >
           <span className="flex h-14 w-14 shrink-0 items-center justify-center">
@@ -70,14 +70,14 @@ function AppRoutes() {
       </div>
 
       <div className="fixed bottom-8 right-6 z-30 hidden lg:block">
-        <div className="glass-panel inline-flex h-14 items-center gap-2 rounded-[20px] px-3 text-[color:var(--text-main)]">
+        <div className="glass-panel inline-flex h-14 items-center gap-2 rounded-[10px] px-3 text-[color:var(--text-main)]">
           <span className="pl-1 font-['IBM_Plex_Mono'] text-[0.68rem] font-medium uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
             {app.t.language}
           </span>
-          <div className="relative grid grid-cols-2 items-center rounded-[16px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-1">
+          <div className="relative grid grid-cols-2 items-center rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-1">
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.125rem)] rounded-[12px] bg-[linear-gradient(135deg,var(--accent-start),var(--accent-mid)_55%,var(--accent-end))] shadow-[0_0_18px_var(--accent-shadow)] transition-transform duration-300 ease-out"
+              className="pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.125rem)] rounded-[10px] bg-[linear-gradient(135deg,var(--accent-start),var(--accent-mid)_55%,var(--accent-end))] shadow-[0_0_18px_var(--accent-shadow)] transition-transform duration-300 ease-out"
               style={{ transform: `translateX(${app.language === 'pt' ? '0%' : '100%'})` }}
             />
             {(['pt', 'en'] as const).map((option) => {
@@ -90,7 +90,7 @@ function AppRoutes() {
                   aria-pressed={active}
                   onClick={() => app.switchLanguage(option)}
                   className={[
-                    'relative z-10 inline-flex h-8 min-w-11 items-center justify-center rounded-[12px] px-3 font-[IBM_Plex_Mono] text-[0.68rem] font-semibold uppercase tracking-[0.16em] transition',
+                    'relative z-10 inline-flex h-8 min-w-11 items-center justify-center rounded-[10px] px-3 font-[IBM_Plex_Mono] text-[0.68rem] font-semibold uppercase tracking-[0.16em] transition',
                     active ? 'text-white' : 'text-[color:var(--text-soft)] hover:text-[color:var(--text-main)]',
                   ].join(' ')}
                 >

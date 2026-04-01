@@ -29,7 +29,7 @@ export function ChatMessageList() {
     <div className="mt-2 min-h-0 flex-1 overflow-hidden sm:mt-3 lg:mt-4">
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[980px] flex-col overflow-hidden lg:flex-row lg:gap-2">
         {showStickyPassagePanel ? (
-          <aside className="glass-card hidden w-[350px] shrink-0 overflow-hidden rounded-[14px] border border-[color:var(--card-border)] bg-transparent p-2 lg:flex lg:flex-col">
+          <aside className="glass-card hidden w-[350px] shrink-0 overflow-hidden rounded-[10px] border border-[color:var(--card-border)] bg-transparent p-2 lg:flex lg:flex-col">
             <p className="font-['IBM_Plex_Mono'] text-[0.66rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
               {language === 'pt' ? 'Texto-base' : 'Base passage'}
             </p>
@@ -57,7 +57,7 @@ export function ChatMessageList() {
               >
                 <article
                   className={[
-                    'glass-card rounded-[14px] p-2',
+                    'glass-card rounded-[10px] p-2',
                     message.role === 'user'
                       ? 'w-fit max-w-[84%] bg-[linear-gradient(180deg,rgba(31,59,138,0.42),rgba(13,24,64,0.24))] lg:max-w-[760px]'
                       : 'w-full',
@@ -68,7 +68,7 @@ export function ChatMessageList() {
                   </span>
                   {message.role === 'assistant' ? (
                     message.quiz ? (
-                      <div className="mt-2 rounded-[18px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
+                      <div className="mt-2 rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
                         {message.quiz.topic ? (
                           <p className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
                             {message.quiz.topic}
@@ -90,7 +90,7 @@ export function ChatMessageList() {
                                 onClick={() => selectQuizOption(message.id, option.id)}
                                 disabled={isAnswered}
                                 className={[
-                                  'rounded-[14px] border px-2 py-2 text-left text-sm transition',
+                                  'rounded-[10px] border px-2 py-2 text-left text-sm transition',
                                   isAnswered && isCorrect ? 'border-emerald-400/60 bg-emerald-500/10 text-[color:var(--text-main)]' : '',
                                   isAnswered && isSelected && !isCorrect ? 'border-rose-400/60 bg-rose-500/10 text-[color:var(--text-main)]' : '',
                                   !isAnswered ? 'border-[color:var(--card-border)] bg-transparent hover:-translate-y-0.5' : '',
@@ -113,7 +113,7 @@ export function ChatMessageList() {
                         ) : null}
                       </div>
                     ) : message.trueFalse ? (
-                      <div className="mt-2 rounded-[18px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
+                      <div className="mt-2 rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
                         {message.trueFalse.topic ? (
                           <p className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
                             {message.trueFalse.topic}
@@ -136,7 +136,7 @@ export function ChatMessageList() {
                                 onClick={() => selectTrueFalseOption(message.id, value)}
                                 disabled={isAnswered}
                                 className={[
-                                  'rounded-[14px] border px-2 py-2 text-sm transition',
+                                  'rounded-[10px] border px-2 py-2 text-sm transition',
                                   isAnswered && isCorrect ? 'border-emerald-400/60 bg-emerald-500/10 text-[color:var(--text-main)]' : '',
                                   isAnswered && isSelected && !isCorrect ? 'border-rose-400/60 bg-rose-500/10 text-[color:var(--text-main)]' : '',
                                   !isAnswered ? 'border-[color:var(--card-border)] hover:-translate-y-0.5' : '',
@@ -157,7 +157,7 @@ export function ChatMessageList() {
                         ) : null}
                       </div>
                     ) : message.shortAnswer ? (
-                      <div className="mt-2 rounded-[18px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
+                      <div className="mt-2 rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
                         {message.shortAnswer.topic ? (
                           <p className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
                             {message.shortAnswer.topic}
@@ -225,7 +225,7 @@ export function ChatMessageList() {
 
             {isLoading && !hasPendingExamMessage ? (
               <div className="flex w-full max-w-[700px] justify-start">
-                <article className="glass-card w-full rounded-[14px] p-2">
+                <article className="glass-card w-full rounded-[10px] p-2">
                   <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
                     Mentor AI
                   </span>
@@ -243,7 +243,7 @@ export function ChatMessageList() {
             'mt-2 flex',
             showStickyPassagePanel ? 'justify-start' : 'justify-center',
           ].join(' ')}>
-            <div className="glass-card w-full max-w-[700px] rounded-[13px] p-2 sm:p-2">
+            <div className="glass-card w-full max-w-[700px] rounded-[10px] p-2 sm:p-2">
               <div className="flex items-end gap-2">
                 <textarea
                   ref={draftTextareaRef}
@@ -255,13 +255,13 @@ export function ChatMessageList() {
                   rows={1}
                   disabled={isLoading}
                   placeholder={language === 'pt' ? 'Pergunte algo, peca um plano ou gere uma tarefa' : 'Ask something, request a plan, or generate a task'}
-                  className="app-scroll min-h-12 min-w-0 flex-1 resize-none rounded-[11px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] px-2 py-2 leading-6 text-[color:var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] [&::placeholder]:overflow-hidden [&::placeholder]:text-ellipsis [&::placeholder]:whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-70 focus:border-[color:var(--accent-line)]"
+                  className="app-scroll min-h-12 min-w-0 flex-1 resize-none rounded-[10px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] px-2 py-2 leading-6 text-[color:var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] [&::placeholder]:overflow-hidden [&::placeholder]:text-ellipsis [&::placeholder]:whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-70 focus:border-[color:var(--accent-line)]"
                 />
                 <button
                   type="submit"
                   disabled={isLoading}
                   aria-label={language === 'pt' ? 'Enviar mensagem' : 'Send message'}
-                  className="accent-button inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="accent-button inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <ArrowUp size={16} />
                 </button>

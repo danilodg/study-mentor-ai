@@ -2,6 +2,7 @@ import { ChatWorkspace } from '../../../components/ChatWorkspace'
 import { responseModeLabel, responseModeOptions } from '../../../content/copy'
 import { useAppContext } from '../../../context/AppContext'
 import { ChatWorkspaceProvider } from '../../../context/ChatWorkspaceContext'
+import { getSessionDisplayName } from '../../../utils/user'
 import { markdownComponents, markdownInlineComponents } from '../../../utils/markdown'
 
 export function ChatPage() {
@@ -10,6 +11,9 @@ export function ChatPage() {
   return (
     <ChatWorkspaceProvider value={{
       language: app.language,
+      switchLanguage: app.switchLanguage,
+      theme: app.theme,
+      setTheme: app.setTheme,
       t: app.t,
       isDesktopSidebarPinned: app.isDesktopSidebarPinned,
       isDesktopSidebarOpen: app.isDesktopSidebarOpen,
@@ -22,11 +26,13 @@ export function ChatPage() {
       conversationList: conversationSummaries,
       activeConversationId: app.activeConversationId,
       setActiveConversationId: app.setActiveConversationId,
+      deleteConversation: app.deleteConversation,
       responseModeOptions,
       responseMode: app.responseMode,
       setResponseMode: app.setResponseMode,
       responseModeLabel,
       sessionEmail: app.session?.user.email,
+      sessionDisplayName: getSessionDisplayName(app.session),
       showStickyPassagePanel: app.showStickyPassagePanel,
       examPassage: app.activeConversation?.examPassage,
       visibleMessages: app.visibleMessages,

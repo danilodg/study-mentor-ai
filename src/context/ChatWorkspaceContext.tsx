@@ -1,10 +1,13 @@
 import { createContext, useContext } from 'react'
 import type { FormEvent, RefObject, ReactNode } from 'react'
 import type { Components } from 'react-markdown'
-import type { Conversation, CopyBlock, Message, QuizOptionId, ResponseMode } from '../types/chat'
+import type { Conversation, CopyBlock, Message, QuizOptionId, ResponseMode, Theme } from '../types/chat'
 
 export interface ChatWorkspaceContextValue {
   language: 'pt' | 'en'
+  switchLanguage: (nextLanguage: 'pt' | 'en') => void
+  theme: Theme
+  setTheme: (value: Theme | ((current: Theme) => Theme)) => void
   t: CopyBlock
   isDesktopSidebarPinned: boolean
   isDesktopSidebarOpen: boolean
@@ -17,11 +20,13 @@ export interface ChatWorkspaceContextValue {
   conversationList: Array<{ id: string; title: string }>
   activeConversationId: string
   setActiveConversationId: (id: string) => void
+  deleteConversation: (id: string) => void
   responseModeOptions: ResponseMode[]
   responseMode: ResponseMode
   setResponseMode: (mode: ResponseMode) => void
   responseModeLabel: Record<'pt' | 'en', Record<ResponseMode, string>>
   sessionEmail?: string
+  sessionDisplayName?: string
   showStickyPassagePanel: boolean
   examPassage?: string
   visibleMessages: Message[]

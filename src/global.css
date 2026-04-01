@@ -68,6 +68,8 @@
     --accent-mid: #687eff;
     --accent-end: #8b66ff;
     --accent-shadow: rgba(72, 133, 255, 0.35);
+    --mobile-drawer-bg: #0a1230;
+    --mobile-drawer-card-bg: #111b45;
   }
 
   .app-theme-light {
@@ -96,6 +98,8 @@
     --accent-mid: #4f7cff;
     --accent-end: #7c69ff;
     --accent-shadow: rgba(88, 137, 255, 0.24);
+    --mobile-drawer-bg: #f3f7ff;
+    --mobile-drawer-card-bg: #e7efff;
   }
 }
 

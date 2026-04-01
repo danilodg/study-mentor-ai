@@ -1,6 +1,7 @@
 import { ArrowLeft, PanelLeft, Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useChatWorkspaceContext } from '../../context/ChatWorkspaceContext'
+import { truncateIdentity } from '../../utils/user'
 
 export function ChatHeader() {
   const navigate = useNavigate()
@@ -8,8 +9,13 @@ export function ChatHeader() {
     language,
     t,
     sessionEmail,
+    sessionDisplayName,
     setIsMobileConversationMenuOpen,
   } = useChatWorkspaceContext()
+
+  const accountLabel = sessionEmail
+    ? truncateIdentity(sessionDisplayName || sessionEmail, 18)
+    : (language === 'pt' ? 'Entrar' : 'Sign in')
 
   return (
     <div className="flex items-center gap-2 border-b border-[color:var(--panel-border)] pb-1.5 sm:pb-2">
@@ -32,10 +38,9 @@ export function ChatHeader() {
           type="button"
           onClick={() => navigate(sessionEmail ? '/profile' : '/auth')}
           className="inline-flex items-center rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-xs font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 sm:text-sm"
+          title={sessionEmail ? (sessionDisplayName || sessionEmail) : undefined}
         >
-          {sessionEmail
-            ? (language === 'pt' ? 'Conta' : 'Account')
-            : (language === 'pt' ? 'Entrar' : 'Sign in')}
+          {accountLabel}
         </button>
         <button
           type="button"
