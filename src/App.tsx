@@ -1,31 +1,43 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
-import type { Session } from '@supabase/supabase-js'
 import {
-  ArrowLeft,
-  ArrowUp,
-  BookOpenText,
-  BrainCircuit,
-  ClipboardList,
   MoonStar,
-  PanelLeft,
-  Sparkles,
   SunMedium,
 } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import { isSupabaseConfigured, supabase } from './lib/supabase'
-
-type Theme = 'dark' | 'light'
-type Language = 'pt' | 'en'
-type Screen = 'landing' | 'auth' | 'chat'
-type ResponseMode = 'auto' | 'quiz_mcq' | 'true_false' | 'short_answer'
-type ForcedResponseMode = ResponseMode | 'text'
-type ConversationMode = 'chat' | 'exam'
-type DifficultyLevel = 'auto' | 'easy' | 'medium' | 'hard'
-type ExamProfile = 'general' | 'enem'
-type ExamFlow = 'single' | 'passage'
-type PlanCode = 'free' | 'pro'
-
+import { AuthScreen } from './components/AuthScreen'
+import { ChatWorkspace } from './components/ChatWorkspace'
+import { LandingScreen } from './components/LandingScreen'
+import { NewConversationModal } from './components/NewConversationModal'
+import { ProfileScreen } from './components/ProfileScreen'
+import { isSupabaseConfigured, useAuth } from './context/AuthContext'
+import { useChatDerived } from './hooks/useChatDerived'
+import { useCloudSync } from './hooks/useCloudSync'
+import type {
+  AssistantReplyPayload,
+  Conversation,
+  CopyBlock,
+  DifficultyLevel,
+  ExamFlow,
+  ExamProfile,
+  ForcedResponseMode,
+  Language,
+  Message,
+  QuizOptionId,
+  ResponseMode,
+  Screen,
+  StoredChatState,
+  Theme,
+  ConversationMode,
+} from './types/chat'
+import {
+  createConversation,
+  getConversationTitle,
+  getQuestionOnlyHistory,
+  getStoredChatState,
+  parseAssistantReply,
+  parseRetryDelayMs,
+} from './utils/chat'
+import { markdownComponents, markdownInlineComponents } from './utils/markdown'
 type ThemeVariables = CSSProperties & {
   '--page-bg': string
   '--page-gradient': string
@@ -54,100 +66,6 @@ type ThemeVariables = CSSProperties & {
   '--accent-shadow': string
 }
 
-interface Message {
-  id: string
-  role: 'assistant' | 'user'
-  text: string
-  isExamPassage?: boolean
-  responseType?: 'text' | 'quiz_mcq' | 'true_false' | 'short_answer'
-  quiz?: QuizActivity
-  trueFalse?: TrueFalseActivity
-  shortAnswer?: ShortAnswerActivity
-  selectedOptionId?: QuizOptionId
-  selectedTrueFalse?: boolean
-  retryAction?: 'chat' | 'exam'
-  retrySourceText?: string
-  retryQuestionNumber?: number
-  retryAt?: number
-}
-
-type QuizOptionId = 'A' | 'B' | 'C' | 'D'
-
-interface QuizOption {
-  id: QuizOptionId
-  text: string
-}
-
-interface QuizActivity {
-  id: string
-  topic: string
-  question: string
-  options: QuizOption[]
-  correctOptionId: QuizOptionId
-  explanation: string
-}
-
-interface TrueFalseActivity {
-  id: string
-  topic: string
-  statement: string
-  correctAnswer: boolean
-  explanation: string
-}
-
-interface ShortAnswerActivity {
-  id: string
-  topic: string
-  question: string
-  sampleAnswer: string
-  evaluationCriteria: string[]
-}
-
-interface AssistantStructuredResponse {
-  type: 'text' | 'quiz_mcq' | 'true_false' | 'short_answer'
-  text?: string
-  id?: string
-  topic?: string
-  question?: string
-  options?: Array<{ id?: string; text?: string }>
-  correctOptionId?: string
-  statement?: string
-  correctAnswer?: boolean
-  sampleAnswer?: string
-  evaluationCriteria?: string[]
-  explanation?: string
-}
-
-interface AssistantReplyPayload {
-  responseType: 'text' | 'quiz_mcq' | 'true_false' | 'short_answer'
-  text: string
-  quiz?: QuizActivity
-  trueFalse?: TrueFalseActivity
-  shortAnswer?: ShortAnswerActivity
-}
-
-interface Conversation {
-  id: string
-  title: string
-  messages: Message[]
-  mode: ConversationMode
-  topic: string
-  difficulty: DifficultyLevel
-  examProfile: ExamProfile
-  examFlow: ExamFlow
-  examPassage: string
-  examQuestionTarget: number
-  questionCount: number
-  createdAt: number
-  updatedAt: number
-}
-
-interface TaskItem {
-  title: string
-  description: string
-  status: 'done' | 'active' | 'next'
-}
-
 interface GeminiPart {
   text?: string
 }
@@ -168,51 +86,6 @@ interface GeminiErrorResponse {
   }
 }
 
-interface StoredChatState {
-  conversations: Conversation[]
-  activeConversationId: string
-  language: Language
-  responseMode?: ResponseMode
-  messages?: Message[]
-}
-
-interface CopyBlock {
-  brandLabel: string
-  heroTitle: string
-  heroDescription: string
-  primaryCta: string
-  secondaryCta: string
-  featuredLabel: string
-  featuredTitle: string
-  featuredItems: string[]
-  metricItems: Array<{ value: string; label: string }>
-  workspaceTitle: string
-  workspaceDescription: string
-  researchTitle: string
-  progressTitle: string
-  previewAssistantText: string
-  previewUserText: string
-  inputLabel: string
-  inputPlaceholder: string
-  send: string
-  newChat: string
-  theme: string
-  language: string
-  chatBadge: string
-  insightTitle: string
-  insightList: string[]
-  researchList: string[]
-  quickPrompts: string[]
-  tasks: TaskItem[]
-  initialMessages: Message[]
-  responses: {
-    default: string
-    ai: string
-    research: string
-    task: string
-    prompt: string
-  }
-}
 
 const themes: Record<Theme, ThemeVariables> = {
   dark: {
@@ -409,12 +282,6 @@ const copy: Record<Language, CopyBlock> = {
 const googleAiApiKey = import.meta.env.VITE_GOOGLE_AI_API_KEY?.trim()
 const chatStorageKey = 'study-mentor-ai-chat'
 const cloudSyncDebounceMs = 1300
-
-function parseStoredResponseMode(value: unknown): ResponseMode {
-  return value === 'quiz_mcq' || value === 'true_false' || value === 'short_answer' || value === 'auto'
-    ? value
-    : 'auto'
-}
 const googleAiApiUrl = googleAiApiKey
   ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${googleAiApiKey}`
   : ''
@@ -545,268 +412,8 @@ function getResponseModeInstruction(language: Language, mode: ForcedResponseMode
     : `Response mode: FORCED to ${mode}. Return exactly that type.`
 }
 
-function cleanAssistantReply(text: string) {
-  return text
-    .replace(/^---+$/gm, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-function normalizeJsonText(text: string) {
-  return text
-    .trim()
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```$/i, '')
-    .trim()
-}
-
-function parseRetryDelayMs(errorMessage: string) {
-  const match = errorMessage.match(/(?:please\s+retry\s+in|retry\s+in|try\s+again\s+in|retrydelay[":=\s]*)([\d.]+)\s*(?:s|sec|seconds)?/i)
-
-  if (!match) {
-    return 0
-  }
-
-  const seconds = Number.parseFloat(match[1])
-
-  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds * 1000) : 0
-}
-
-function parseQuizOptionId(value: string | undefined): QuizOptionId | null {
-  if (!value) {
-    return null
-  }
-
-  const normalized = value.toUpperCase()
-
-  return normalized === 'A' || normalized === 'B' || normalized === 'C' || normalized === 'D'
-    ? normalized
-    : null
-}
-
-function getQuestionOnlyHistory(conversation: Conversation, limit = 8) {
-  const extractedQuestions = conversation.messages
-    .filter((message) => message.role === 'assistant')
-    .map((message) => {
-      if (message.quiz?.question) {
-        return message.quiz.question
-      }
-
-      if (message.trueFalse?.statement) {
-        return message.trueFalse.statement
-      }
-
-      if (message.shortAnswer?.question) {
-        return message.shortAnswer.question
-      }
-
-      return ''
-    })
-    .map((question) => question.replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-
-  return extractedQuestions
-    .slice(-limit)
-    .map((question) => (question.length > 220 ? `${question.slice(0, 220).trim()}...` : question))
-}
-
-function parseAssistantReply(rawText: string): AssistantReplyPayload {
-  const normalizedRawText = normalizeJsonText(rawText)
-
-  try {
-    const parsed = JSON.parse(normalizedRawText) as AssistantStructuredResponse
-
-    if (parsed.type === 'quiz_mcq') {
-      const options = (parsed.options ?? [])
-        .map((option) => {
-          const optionId = parseQuizOptionId(option.id)
-
-          if (!optionId || !option.text) {
-            return null
-          }
-
-          return {
-            id: optionId,
-            text: option.text.trim().replace(/\s+/g, ' '),
-          } satisfies QuizOption
-        })
-        .filter(Boolean) as QuizOption[]
-
-      const uniqueOptionIds = new Set(options.map((option) => option.id))
-      const correctOptionId = parseQuizOptionId(parsed.correctOptionId)
-
-      if (options.length === 4 && uniqueOptionIds.size === 4 && correctOptionId && parsed.question && parsed.explanation) {
-        return {
-          responseType: 'quiz_mcq',
-          text: '',
-          quiz: {
-            id: parsed.id?.trim() || `q-${Date.now()}`,
-            topic: parsed.topic?.trim() || '',
-            question: parsed.question.trim(),
-            options,
-            correctOptionId,
-            explanation: parsed.explanation.trim(),
-          },
-        }
-      }
-    }
-
-    if (parsed.type === 'true_false' && parsed.statement && typeof parsed.correctAnswer === 'boolean' && parsed.explanation) {
-      return {
-        responseType: 'true_false',
-        text: '',
-        trueFalse: {
-          id: parsed.id?.trim() || `tf-${Date.now()}`,
-          topic: parsed.topic?.trim() || '',
-          statement: parsed.statement.trim(),
-          correctAnswer: parsed.correctAnswer,
-          explanation: parsed.explanation.trim(),
-        },
-      }
-    }
-
-    if (parsed.type === 'short_answer' && parsed.question && parsed.sampleAnswer) {
-      const criteria = (parsed.evaluationCriteria ?? []).filter(Boolean)
-
-      return {
-        responseType: 'short_answer',
-        text: '',
-        shortAnswer: {
-          id: parsed.id?.trim() || `sa-${Date.now()}`,
-          topic: parsed.topic?.trim() || '',
-          question: parsed.question.trim(),
-          sampleAnswer: parsed.sampleAnswer.trim(),
-          evaluationCriteria: criteria,
-        },
-      }
-    }
-
-    if (parsed.type === 'text' && typeof parsed.text === 'string' && parsed.text.trim()) {
-      return {
-        responseType: 'text',
-        text: cleanAssistantReply(parsed.text),
-      }
-    }
-  } catch {
-    return {
-      responseType: 'text',
-      text: cleanAssistantReply(rawText),
-    }
-  }
-
-  return {
-    responseType: 'text',
-    text: cleanAssistantReply(rawText),
-  }
-}
-
-function createConversation(overrides?: Partial<Pick<Conversation, 'mode' | 'topic' | 'difficulty' | 'title' | 'examProfile' | 'examFlow' | 'examPassage' | 'examQuestionTarget'>>) {
-  const now = Date.now()
-
-  return {
-    id: `c-${now}-${Math.random().toString(36).slice(2, 8)}`,
-    title: overrides?.title ?? '',
-    messages: [],
-    mode: overrides?.mode ?? 'chat',
-    topic: overrides?.topic ?? '',
-    difficulty: overrides?.difficulty ?? 'auto',
-    examProfile: overrides?.examProfile ?? 'general',
-    examFlow: overrides?.examFlow ?? 'single',
-    examPassage: overrides?.examPassage ?? '',
-    examQuestionTarget: overrides?.examQuestionTarget ?? 0,
-    questionCount: 0,
-    createdAt: now,
-    updatedAt: now,
-  } satisfies Conversation
-}
-
-function getStoredChatState() {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  const rawState = window.localStorage.getItem(chatStorageKey)
-
-  if (!rawState) {
-    return null
-  }
-
-  try {
-    const parsed = JSON.parse(rawState) as StoredChatState
-
-    if (Array.isArray(parsed.conversations) && parsed.conversations.length > 0) {
-      const normalizedConversations: Conversation[] = parsed.conversations.map((conversation) => ({
-        id: conversation.id,
-        title: conversation.title,
-        messages: conversation.messages,
-        mode: conversation.mode === 'exam' ? 'exam' : 'chat',
-        topic: typeof conversation.topic === 'string' ? conversation.topic : '',
-        difficulty: conversation.difficulty === 'easy' || conversation.difficulty === 'medium' || conversation.difficulty === 'hard' || conversation.difficulty === 'auto'
-          ? conversation.difficulty
-          : 'auto',
-        examProfile: conversation.examProfile === 'enem' ? 'enem' : 'general',
-        examFlow: conversation.examFlow === 'passage' ? 'passage' : 'single',
-        examPassage: typeof conversation.examPassage === 'string' ? conversation.examPassage : '',
-        examQuestionTarget: typeof conversation.examQuestionTarget === 'number' ? conversation.examQuestionTarget : 0,
-        questionCount: typeof conversation.questionCount === 'number' ? conversation.questionCount : 0,
-        createdAt: conversation.createdAt,
-        updatedAt: conversation.updatedAt,
-      }))
-
-      const safeActiveConversationId = normalizedConversations.some((conversation) => conversation.id === parsed.activeConversationId)
-        ? parsed.activeConversationId
-        : normalizedConversations[0].id
-
-      return {
-        conversations: normalizedConversations,
-        activeConversationId: safeActiveConversationId,
-        language: parsed.language === 'en' ? 'en' : 'pt',
-        responseMode: parseStoredResponseMode(parsed.responseMode),
-      } satisfies StoredChatState
-    }
-
-    if (Array.isArray(parsed.messages)) {
-      const migratedConversation = createConversation()
-
-      return {
-        conversations: [{
-          ...migratedConversation,
-          messages: parsed.messages,
-          title: parsed.messages.find((message) => message.role === 'user')?.text ?? '',
-          mode: 'chat',
-          topic: '',
-          difficulty: 'auto',
-          examProfile: 'general',
-          examFlow: 'single',
-          examPassage: '',
-          examQuestionTarget: 0,
-          questionCount: 0,
-        }],
-        activeConversationId: migratedConversation.id,
-        language: parsed.language === 'en' ? 'en' : 'pt',
-        responseMode: 'auto',
-      } satisfies StoredChatState
-    }
-
-    return null
-  } catch {
-    return null
-  }
-}
-
-function getConversationTitle(text: string) {
-  const normalized = text.trim().replace(/\s+/g, ' ')
-
-  if (normalized.length <= 48) {
-    return normalized
-  }
-
-  return `${normalized.slice(0, 48).trim()}...`
-}
-
 function App() {
-  const storedChatState = getStoredChatState()
+  const storedChatState = getStoredChatState(chatStorageKey)
   const initialConversations = storedChatState?.conversations?.length
     ? storedChatState.conversations
     : [createConversation()]
@@ -828,15 +435,23 @@ function App() {
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations)
   const [activeConversationId, setActiveConversationId] = useState<string>(storedChatState?.activeConversationId ?? initialConversations[0].id)
   const [isLoading, setIsLoading] = useState(false)
-  const [session, setSession] = useState<Session | null>(null)
-  const [userPlan, setUserPlan] = useState<PlanCode>('free')
-  const [isCloudSyncEnabled, setIsCloudSyncEnabled] = useState(false)
+  const {
+    session,
+    userPlan,
+    isCloudSyncEnabled,
+    setIsCloudSyncEnabled,
+    signInWithEmail,
+    signUpWithEmail,
+    signInWithGoogle,
+    signOutFromCloud,
+    authError,
+    isAuthBusy,
+    setUserPlan,
+  } = useAuth()
   const [hasLoadedCloudState, setHasLoadedCloudState] = useState(false)
   const [lastCloudSyncAt, setLastCloudSyncAt] = useState<number | null>(null)
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
-  const [authError, setAuthError] = useState('')
-  const [isAuthBusy, setIsAuthBusy] = useState(false)
   const [nowMs, setNowMs] = useState(() => Date.now())
   const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const examGenerationRequestsRef = useRef<Set<string>>(new Set())
@@ -844,14 +459,7 @@ function App() {
 
   const t = copy[language]
   const themeStyle = useMemo(() => themes[theme], [theme])
-  const conversationList = useMemo(
-    () => [...conversations].sort((a, b) => b.updatedAt - a.updatedAt),
-    [conversations],
-  )
-  const activeConversation = useMemo(
-    () => conversations.find((conversation) => conversation.id === activeConversationId) ?? conversations[0],
-    [activeConversationId, conversations],
-  )
+  const { conversationList, activeConversation } = useChatDerived(conversations, activeConversationId)
   const messages = activeConversation?.messages ?? []
   const visibleMessages = messages.filter((message) => {
     if (message.isExamPassage) {
@@ -899,125 +507,32 @@ function App() {
     )
   }, [currentStoredState])
 
+  useCloudSync({
+    sessionUserId: session?.user.id,
+    isCloudSyncEnabled,
+    userPlan,
+    setUserPlan,
+    setIsCloudSyncEnabled,
+    currentStoredState,
+    hasLoadedCloudState,
+    setHasLoadedCloudState,
+    setLastCloudSyncAt,
+    setConversations,
+    setActiveConversationId,
+    setLanguage,
+    setResponseMode,
+    debounceMs: cloudSyncDebounceMs,
+  })
+
   useEffect(() => {
-    if (!supabase) {
+    if (!session) {
       return
     }
 
-    let isMounted = true
-
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!isMounted) {
-        return
-      }
-
-      setSession(data.session ?? null)
-      setIsCloudSyncEnabled(Boolean(data.session))
-      setHasLoadedCloudState(false)
-
-      if (!data.session) {
-        setUserPlan('free')
-      }
-    })
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession)
-      setIsCloudSyncEnabled(false)
-      setHasLoadedCloudState(false)
-      setLastCloudSyncAt(null)
-      setAuthError('')
-
-      if (!nextSession) {
-        setUserPlan('free')
-      }
-
-      if (nextSession) {
-        setScreen('chat')
-      }
-    })
-
-    return () => {
-      isMounted = false
-      authListener.subscription.unsubscribe()
+    if (screen === 'auth') {
+      setScreen('chat')
     }
-  }, [])
-
-  useEffect(() => {
-    if (!supabase || !session || hasLoadedCloudState) {
-      return
-    }
-
-    const client = supabase
-
-    let cancelled = false
-
-    const loadCloudState = async () => {
-      const { data, error } = await client
-        .from('user_workspace_states')
-        .select('state, plan_code')
-        .eq('user_id', session.user.id)
-        .maybeSingle()
-
-      if (cancelled) {
-        return
-      }
-
-      const planCode = data?.plan_code === 'pro' ? 'pro' : 'free'
-      const state = data?.state as StoredChatState | null
-
-      setUserPlan(planCode)
-      setIsCloudSyncEnabled(planCode === 'pro')
-
-      if (!error && planCode === 'pro' && state?.conversations?.length) {
-        const nextConversations = state.conversations
-        const nextActiveConversationId = nextConversations.some((conversation) => conversation.id === state.activeConversationId)
-          ? state.activeConversationId
-          : nextConversations[0].id
-
-        setConversations(nextConversations)
-        setActiveConversationId(nextActiveConversationId)
-        setLanguage(state.language === 'en' ? 'en' : 'pt')
-        setResponseMode(parseStoredResponseMode(state.responseMode))
-      }
-
-      setHasLoadedCloudState(true)
-    }
-
-    void loadCloudState()
-
-    return () => {
-      cancelled = true
-    }
-  }, [hasLoadedCloudState, session])
-
-  useEffect(() => {
-    if (!supabase || !session || !hasLoadedCloudState || !isCloudSyncEnabled || userPlan !== 'pro') {
-      return
-    }
-
-    const client = supabase
-
-    const timeoutId = window.setTimeout(() => {
-      void client
-        .from('user_workspace_states')
-        .upsert({
-          user_id: session.user.id,
-          state: currentStoredState,
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id',
-        })
-        .then(({ error }) => {
-          if (!error) {
-            setLastCloudSyncAt(Date.now())
-          }
-        })
-    }, cloudSyncDebounceMs)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [currentStoredState, hasLoadedCloudState, isCloudSyncEnabled, session, userPlan])
+  }, [screen, session])
 
   useEffect(() => {
     if (!activeConversation || isLoading) {
@@ -1075,93 +590,6 @@ function App() {
     }
 
     setScreen('chat')
-  }
-
-  async function signInWithEmail() {
-    if (!supabase) {
-      setAuthError(language === 'pt' ? 'Supabase nao configurado no ambiente.' : 'Supabase is not configured in this environment.')
-      return
-    }
-
-    if (!authEmail.trim() || !authPassword.trim()) {
-      setAuthError(language === 'pt' ? 'Informe email e senha.' : 'Please provide email and password.')
-      return
-    }
-
-    setIsAuthBusy(true)
-    setAuthError('')
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email: authEmail.trim(),
-      password: authPassword,
-    })
-
-    if (error) {
-      setAuthError(error.message)
-    }
-
-    setIsAuthBusy(false)
-  }
-
-  async function signUpWithEmail() {
-    if (!supabase) {
-      setAuthError(language === 'pt' ? 'Supabase nao configurado no ambiente.' : 'Supabase is not configured in this environment.')
-      return
-    }
-
-    if (!authEmail.trim() || !authPassword.trim()) {
-      setAuthError(language === 'pt' ? 'Informe email e senha.' : 'Please provide email and password.')
-      return
-    }
-
-    setIsAuthBusy(true)
-    setAuthError('')
-
-    const { error } = await supabase.auth.signUp({
-      email: authEmail.trim(),
-      password: authPassword,
-    })
-
-    if (error) {
-      setAuthError(error.message)
-    } else {
-      setAuthError(language === 'pt' ? 'Conta criada. Se necessario, confirme seu email.' : 'Account created. Confirm your email if required.')
-    }
-
-    setIsAuthBusy(false)
-  }
-
-  async function signInWithGoogle() {
-    if (!supabase) {
-      setAuthError(language === 'pt' ? 'Supabase nao configurado no ambiente.' : 'Supabase is not configured in this environment.')
-      return
-    }
-
-    setIsAuthBusy(true)
-    setAuthError('')
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
-    })
-
-    if (error) {
-      setAuthError(error.message)
-      setIsAuthBusy(false)
-      return
-    }
-  }
-
-  async function signOutFromCloud() {
-    if (!supabase) {
-      return
-    }
-
-    await supabase.auth.signOut()
-    setAuthPassword('')
-    setScreen('auth')
   }
 
   useEffect(() => {
@@ -1886,26 +1314,6 @@ function App() {
     }
   }
 
-  const markdownComponents = {
-    h1: ({ children }: any) => <h3 className="mt-4 text-base font-semibold text-[color:var(--text-main)] first:mt-0">{children}</h3>,
-    h2: ({ children }: any) => <h3 className="mt-4 text-base font-semibold text-[color:var(--text-main)] first:mt-0">{children}</h3>,
-    h3: ({ children }: any) => <h4 className="mt-4 text-sm font-semibold uppercase tracking-[0.08em] text-[color:var(--accent-soft)] first:mt-0">{children}</h4>,
-    p: ({ children }: any) => <p className="mt-2 first:mt-0">{children}</p>,
-    ul: ({ children }: any) => <ul className="mt-2 list-disc space-y-1 pl-5">{children}</ul>,
-    ol: ({ children }: any) => <ol className="mt-2 list-decimal space-y-1 pl-5">{children}</ol>,
-    li: ({ children }: any) => <li>{children}</li>,
-    strong: ({ children }: any) => <strong className="font-semibold text-[color:var(--text-main)]">{children}</strong>,
-    em: ({ children }: any) => <em className="italic">{children}</em>,
-    code: ({ children }: any) => <code className="rounded bg-[color:var(--input-bg)] px-1.5 py-0.5 font-['IBM_Plex_Mono'] text-[0.85em] text-[color:var(--text-main)]">{children}</code>,
-  }
-
-  const markdownInlineComponents = {
-    p: ({ children }: any) => <>{children}</>,
-    strong: ({ children }: any) => <strong className="font-semibold text-[color:var(--text-main)]">{children}</strong>,
-    em: ({ children }: any) => <em className="italic">{children}</em>,
-    code: ({ children }: any) => <code className="rounded bg-[color:var(--input-bg)] px-1.5 py-0.5 font-['IBM_Plex_Mono'] text-[0.85em] text-[color:var(--text-main)]">{children}</code>,
-  }
-
   return (
     <div
       className="min-h-screen overflow-hidden bg-[var(--page-bg)] text-[color:var(--text-soft)] [font-family:Outfit,Segoe_UI,sans-serif] transition-colors duration-300"
@@ -1972,963 +1380,129 @@ function App() {
         screen === 'landing' ? 'max-w-[1180px]' : 'max-w-[1880px]',
       ].join(' ')}>
         {screen === 'landing' ? (
-          <>
-            <div className="pointer-events-none fixed left-4 top-24 z-20 hidden w-72 2xl:block">
-            <aside className="pointer-events-auto glass-panel max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden rounded-[28px] p-2 sm:p-3">
-              <span className="section-label">{language === 'pt' ? 'Selecione conversa' : 'Select conversation'}</span>
-              <h2 className="mt-3 font-['Space_Grotesk'] text-[1.3rem] font-bold tracking-[-0.03em] text-[color:var(--text-main)]">
-                {language === 'pt' ? 'Conversas ja existentes' : 'Existing conversations'}
-              </h2>
-
-              <button
-                type="button"
-                onClick={openNewConversationModal}
-                className="mt-2 inline-flex w-full items-center justify-center rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-sm font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 hover:border-[color:var(--accent-line)]"
-              >
-                {t.newChat}
-              </button>
-
-              <div className="mt-5 grid min-w-0 gap-3">
-                {conversationList.length > 0 ? conversationList.map((conversation, index) => (
-                  <button
-                    key={conversation.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveConversationId(conversation.id)
-                      setDraft('')
-                      goToChatWithAuthGate()
-                    }}
-                    className="glass-card w-full min-w-0 rounded-[20px] border border-[color:var(--card-border)] bg-transparent p-2 text-left transition hover:-translate-y-0.5"
-                  >
-                    <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
-                      {conversation.title || `${t.newChat} ${conversationList.length - index}`}
-                    </p>
-                  </button>
-                )) : (
-                  <article className="glass-card rounded-[20px] p-2 text-sm leading-6 text-[color:var(--text-muted)]">
-                    {language === 'pt'
-                      ? 'Ainda nao existem conversas salvas. Inicie uma mentoria para aparecer aqui.'
-                      : 'No saved conversations yet. Start mentoring to see them here.'}
-                  </article>
-                )}
-              </div>
-            </aside>
-            </div>
-
-            <section className="glass-panel rounded-[28px] px-2 py-2 sm:px-3 sm:py-3 lg:px-4 lg:py-4">
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.06fr)_minmax(340px,0.94fr)] lg:items-center">
-                <div>
-                  <span className="section-label">{t.brandLabel}</span>
-                  <h1 className="mt-3 max-w-[11ch] font-['Space_Grotesk'] text-[clamp(2.55rem,7vw,4.85rem)] font-bold leading-[0.96] tracking-[-0.05em] text-[color:var(--text-main)]">
-                    {t.heroTitle}
-                  </h1>
-                  <p className="mt-3 max-w-[38rem] text-base leading-7 text-[color:var(--text-soft)] sm:text-[1.05rem]">
-                    {t.heroDescription}
-                  </p>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        goToChatWithAuthGate()
-                      }}
-                      className="accent-aura accent-button rounded-full px-3 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5"
-                    >
-                      {t.primaryCta}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDraft(t.quickPrompts[1])
-                        goToChatWithAuthGate()
-                      }}
-                      className="rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-sm font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 hover:border-[color:var(--accent-line)]"
-                    >
-                      {t.secondaryCta}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setScreen('auth')}
-                      className="rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-sm font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 hover:border-[color:var(--accent-line)]"
-                    >
-                      {session
-                        ? (language === 'pt' ? 'Conta conectada' : 'Account connected')
-                        : (language === 'pt' ? 'Entrar / criar conta' : 'Sign in / create account')}
-                    </button>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {[t.workspaceTitle, t.researchTitle, t.progressTitle].map((chip) => (
-                      <span
-                        key={chip}
-                        className="rounded-full border border-[color:var(--card-border)] bg-transparent px-3.5 py-2.5 font-['IBM_Plex_Mono'] text-[0.72rem] uppercase tracking-[0.14em] text-[color:var(--text-soft)]"
-                      >
-                        {chip}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="relative hidden min-h-[460px] overflow-visible lg:block">
-                  <div className="absolute left-0 top-14 z-20 w-[56%] rounded-[28px] border border-[color:var(--card-border)] bg-[#0d1430] p-2 shadow-[0_18px_60px_rgba(7,12,32,0.38)]">
-                    <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--accent-soft)]">
-                      {t.featuredLabel}
-                    </span>
-                    <div className="mt-4 h-24 rounded-[22px] border border-[color:var(--card-border)] bg-[#121b40]" />
-                    <div className="mt-4 space-y-2.5">
-                      {t.featuredItems.map((item) => (
-                        <div key={item} className="rounded-full border border-[color:var(--card-border)] bg-[#121b40] px-3 py-2 text-sm text-[color:var(--text-soft)]">
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="absolute right-0 top-0 z-30 w-[68%] rounded-[28px] border border-[color:var(--card-border)] bg-[#111938] p-2 shadow-[0_22px_65px_rgba(7,12,32,0.42)]">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--accent-soft)]">
-                        {t.chatBadge}
-                      </span>
-                      <div className="flex gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full bg-[color:var(--accent-line)]" />
-                        <span className="h-2.5 w-2.5 rounded-full bg-white/35" />
-                        <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
-                      </div>
-                    </div>
-                    <div className="mt-3 rounded-[22px] border border-[color:var(--card-border)] bg-[#16214a] p-2">
-                      <p className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">Mentor AI</p>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">{t.previewAssistantText}</p>
-                    </div>
-                    <div className="mt-2 rounded-[22px] border border-[color:var(--card-border)] bg-[#1a2858] p-2">
-                      <p className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
-                        {language === 'pt' ? 'Voce' : 'You'}
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">{t.previewUserText}</p>
-                    </div>
-                  </div>
-
-                  <div className="absolute left-[12%] top-60 z-40 w-[64%] rounded-[28px] border border-[color:var(--card-border)] bg-[#0f1736] p-2 shadow-[0_20px_60px_rgba(7,12,32,0.38)]">
-                    <h2 className="font-['Space_Grotesk'] text-[1.18rem] font-bold tracking-[-0.03em] text-[color:var(--text-main)]">
-                      {t.featuredTitle}
-                    </h2>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                      {t.metricItems.map((metric) => (
-                        <div key={metric.label} className="rounded-[20px] border border-[color:var(--card-border)] bg-[#16214a] p-3.5">
-                          <p className="font-['Space_Grotesk'] text-[1.35rem] font-bold tracking-[-0.04em] text-[color:var(--text-main)]">
-                            {metric.value}
-                          </p>
-                          <p className="mt-1.5 text-sm leading-5 text-[color:var(--text-muted)]">{metric.label}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <div className="mt-3 grid gap-2 md:grid-cols-3">
-              {t.metricItems.map((metric, index) => (
-                <article key={metric.label} className="glass-card rounded-[24px] p-2">
-                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-[18px] bg-transparent text-[color:var(--accent-soft)]">
-                    {index === 0 ? <BrainCircuit size={18} /> : index === 1 ? <BookOpenText size={18} /> : <ClipboardList size={18} />}
-                  </div>
-                  <p className="font-['Space_Grotesk'] text-[1.6rem] font-bold tracking-[-0.04em] text-[color:var(--text-main)]">
-                    {metric.value}
-                  </p>
-                  <p className="mt-1.5 text-sm leading-6 text-[color:var(--text-muted)]">{metric.label}</p>
-                </article>
-              ))}
-            </div>
-
-            <section className="mt-3 glass-panel rounded-[28px] p-2 sm:p-3 lg:p-3">
-              <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.82fr)] lg:items-start">
-                <div>
-                  <span className="section-label">{t.progressTitle}</span>
-                  <h2 className="mt-3 max-w-[14ch] font-['Space_Grotesk'] text-[clamp(1.9rem,4vw,3rem)] font-bold leading-[0.98] tracking-[-0.05em] text-[color:var(--text-main)]">
-                    {language === 'pt' ? 'Uma tela inicial para apresentar o produto antes do chat.' : 'A landing introduces the product before the chat.'}
-                  </h2>
-                </div>
-                <div className="grid gap-3">
-                  {t.quickPrompts.map((prompt) => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      onClick={() => {
-                        void submitMessage(prompt)
-                        goToChatWithAuthGate()
-                      }}
-                      className="glass-card rounded-[22px] p-2 text-left text-sm leading-6 text-[color:var(--text-soft)] transition hover:-translate-y-0.5 hover:text-[color:var(--text-main)]"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
-          </>
+          <LandingScreen
+            language={language}
+            t={t}
+            sessionEmail={session?.user.email}
+            conversationList={conversationList.map((conversation) => ({ id: conversation.id, title: conversation.title }))}
+            onOpenNewConversation={openNewConversationModal}
+            onSelectConversation={(conversationId) => {
+              setActiveConversationId(conversationId)
+              setDraft('')
+              goToChatWithAuthGate()
+            }}
+            onPrimaryAction={goToChatWithAuthGate}
+            onSecondaryAction={() => {
+              setDraft(t.quickPrompts[1])
+              goToChatWithAuthGate()
+            }}
+            onAccountAction={() => setScreen(session ? 'profile' : 'auth')}
+            onQuickPromptAction={(prompt) => {
+              void submitMessage(prompt)
+              goToChatWithAuthGate()
+            }}
+          />
         ) : screen === 'auth' ? (
-          <div className="flex min-h-[calc(100dvh-1rem)] items-center justify-center">
-          <section className="mx-auto w-full max-w-lg glass-panel rounded-[28px] p-3 sm:p-4">
-            <h2 className="font-['Space_Grotesk'] text-[1.5rem] font-bold text-[color:var(--text-main)]">
-              {language === 'pt' ? 'Entrar na sua conta' : 'Sign in to your account'}
-            </h2>
-            <p className="mt-1 text-sm text-[color:var(--text-muted)]">
-              {language === 'pt'
-                ? 'Crie conta ou entre para liberar o chat. Plano free usa dados locais; plano pro ativa nuvem.'
-                : 'Create an account or sign in to unlock chat. Free plan uses local data; pro enables cloud sync.'}
-            </p>
-
-            {!isSupabaseConfigured ? (
-              <p className="mt-3 text-sm text-[color:var(--text-muted)]">
-                {language === 'pt'
-                  ? 'Supabase ainda nao configurado neste ambiente. Defina VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.'
-                  : 'Supabase is not configured in this environment. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.'}
-              </p>
-            ) : (
-              <div className="mt-3 grid gap-2">
-                <input
-                  type="email"
-                  value={authEmail}
-                  onChange={(event) => setAuthEmail(event.target.value)}
-                  placeholder={language === 'pt' ? 'Seu email' : 'Your email'}
-                  className="rounded-[12px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
-                />
-                <input
-                  type="password"
-                  value={authPassword}
-                  onChange={(event) => setAuthPassword(event.target.value)}
-                  placeholder={language === 'pt' ? 'Sua senha' : 'Your password'}
-                  className="rounded-[12px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
-                />
-                {authError ? <p className="text-xs text-[color:var(--text-muted)]">{authError}</p> : null}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={isAuthBusy}
-                    onClick={() => { void signInWithGoogle() }}
-                    className="rounded-full border border-[color:var(--card-border)] px-3 py-2 text-sm text-[color:var(--text-main)] disabled:opacity-60"
-                  >
-                    {language === 'pt' ? 'Entrar com Google' : 'Sign in with Google'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isAuthBusy}
-                    onClick={() => { void signInWithEmail() }}
-                    className="accent-button rounded-full px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                  >
-                    {language === 'pt' ? 'Entrar' : 'Sign in'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isAuthBusy}
-                    onClick={() => { void signUpWithEmail() }}
-                    className="rounded-full border border-[color:var(--card-border)] px-3 py-2 text-sm text-[color:var(--text-main)] disabled:opacity-60"
-                  >
-                    {language === 'pt' ? 'Criar conta' : 'Create account'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScreen('landing')}
-                    className="rounded-full border border-[color:var(--card-border)] px-3 py-2 text-sm text-[color:var(--text-main)]"
-                  >
-                    {language === 'pt' ? 'Voltar' : 'Back'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </section>
-          </div>
+          <AuthScreen
+            language={language}
+            isSupabaseConfigured={isSupabaseConfigured}
+            authEmail={authEmail}
+            authPassword={authPassword}
+            authError={authError}
+            isAuthBusy={isAuthBusy}
+            onAuthEmailChange={setAuthEmail}
+            onAuthPasswordChange={setAuthPassword}
+            onSignInWithGoogle={() => { void signInWithGoogle(language) }}
+            onSignInWithEmail={() => { void signInWithEmail(authEmail, authPassword, language) }}
+            onSignUpWithEmail={() => { void signUpWithEmail(authEmail, authPassword, language) }}
+            onBack={() => setScreen('landing')}
+          />
+        ) : screen === 'profile' ? (
+          <ProfileScreen
+            language={language}
+            email={session?.user.email}
+            userPlan={userPlan}
+            isCloudSyncEnabled={isCloudSyncEnabled}
+            onToggleCloudSync={() => setIsCloudSyncEnabled((current) => !current)}
+            onSignOut={() => { void signOutFromCloud(); setScreen('auth') }}
+            onBackToChat={() => setScreen('chat')}
+          />
         ) : (
-          <>
-          <div className={[
-            'grid h-[calc(100dvh-1rem)] gap-2 overflow-hidden lg:h-[calc(100vh-2rem)] lg:overflow-visible',
-            isDesktopSidebarPinned
-              ? 'lg:grid-cols-[420px_minmax(0,1fr)]'
-              : 'lg:grid-cols-[88px_minmax(0,1fr)]',
-          ].join(' ')}>
-          <section className="lg:glass-panel lg:order-2 flex min-h-0 flex-col px-0 pb-0 pt-0 sm:px-0 sm:pb-0 sm:pt-0 lg:rounded-[28px] lg:px-3 lg:pb-3 lg:pt-3">
-            <div className="flex items-center gap-2 border-b border-[color:var(--panel-border)] pb-1.5 sm:pb-2">
-              <button
-                type="button"
-                onClick={() => setIsMobileConversationMenuOpen(true)}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[color:var(--card-border)] bg-transparent text-[color:var(--text-main)] transition hover:-translate-y-0.5 lg:hidden"
-                aria-label={language === 'pt' ? 'Abrir conversas' : 'Open conversations'}
-              >
-                <PanelLeft size={16} />
-              </button>
-              <div className="min-w-0 flex-1">
-                <span className="section-label hidden lg:inline-flex">{t.brandLabel}</span>
-                <h2 className="truncate font-['Space_Grotesk'] text-[1.06rem] font-bold tracking-[-0.03em] text-[color:var(--text-main)] sm:text-[1.2rem] lg:mt-2 lg:text-[1.7rem] lg:tracking-[-0.04em]">
-                  {t.workspaceTitle}
-                </h2>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-3">
-                <button
-                  type="button"
-                  onClick={() => setScreen('auth')}
-                  className="inline-flex items-center rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-xs font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 sm:text-sm"
-                >
-                  {session
-                    ? (language === 'pt' ? 'Conta' : 'Account')
-                    : (language === 'pt' ? 'Entrar' : 'Sign in')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScreen('landing')}
-                   className="hidden items-center gap-2 rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-sm font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 lg:inline-flex"
-                >
-                  <ArrowLeft size={16} />
-                  {language === 'pt' ? 'Voltar' : 'Back'}
-                </button>
-                <div className="hidden rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--accent-soft)] sm:inline-flex">
-                  <Sparkles size={14} className="mr-2" />
-                  {t.chatBadge}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-2 min-h-0 flex-1 overflow-hidden sm:mt-3 lg:mt-4">
-              <div className="mx-auto flex h-full min-h-0 w-full max-w-[980px] flex-col overflow-hidden lg:flex-row lg:gap-2">
-                {showStickyPassagePanel ? (
-                  <aside className="glass-card hidden w-[350px] shrink-0 overflow-hidden rounded-[14px] border border-[color:var(--card-border)] bg-transparent p-2 lg:flex lg:flex-col">
-                    <p className="font-['IBM_Plex_Mono'] text-[0.66rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
-                      {language === 'pt' ? 'Texto-base' : 'Base passage'}
-                    </p>
-                    <div className="app-scroll mt-2 flex-1 overflow-y-auto text-sm leading-6 text-[color:var(--text-soft)]">
-                      <ReactMarkdown components={markdownComponents}>{activeConversation?.examPassage ?? ''}</ReactMarkdown>
-                    </div>
-                  </aside>
-                ) : null}
-
-                <div className={[
-                  'min-h-0 flex flex-col overflow-hidden',
-                  showStickyPassagePanel ? 'flex-1 lg:min-w-0' : 'flex-1',
-                ].join(' ')}>
-                <div className={[
-                  'app-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto',
-                  showStickyPassagePanel ? 'items-start' : 'items-center',
-                ].join(' ')}>
-              {visibleMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className={[
-                    'flex w-full max-w-[700px]',
-                    message.role === 'user' ? 'justify-end' : 'justify-start',
-                  ].join(' ')}
-                >
-                <article
-                  className={[
-                    'glass-card rounded-[14px] p-2',
-                    message.role === 'user'
-                      ? 'w-fit max-w-[84%] bg-[linear-gradient(180deg,rgba(31,59,138,0.42),rgba(13,24,64,0.24))] lg:max-w-[760px]'
-                      : 'w-full',
-                  ].join(' ')}
-                >
-                  <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
-                    {message.role === 'assistant' ? 'Mentor AI' : language === 'pt' ? 'Voce' : 'You'}
-                  </span>
-                  {message.role === 'assistant' ? (
-                    message.quiz ? (
-                      <div className="mt-2 rounded-[18px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
-                        {message.quiz.topic ? (
-                          <p className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
-                            {message.quiz.topic}
-                          </p>
-                        ) : null}
-                        <div className="mt-1 text-sm font-medium leading-6 text-[color:var(--text-main)]">
-                          <ReactMarkdown components={markdownComponents}>{message.quiz.question}</ReactMarkdown>
-                        </div>
-                        <div className="mt-2 grid gap-2">
-                          {message.quiz.options.map((option) => {
-                            const isSelected = message.selectedOptionId === option.id
-                            const isAnswered = Boolean(message.selectedOptionId)
-                            const isCorrect = option.id === message.quiz?.correctOptionId
-
-                            return (
-                              <button
-                                key={option.id}
-                                type="button"
-                                onClick={() => selectQuizOption(message.id, option.id)}
-                                disabled={isAnswered}
-                                className={[
-                                  'rounded-[14px] border px-2 py-2 text-left text-sm transition',
-                                  isAnswered && isCorrect ? 'border-emerald-400/60 bg-emerald-500/10 text-[color:var(--text-main)]' : '',
-                                  isAnswered && isSelected && !isCorrect ? 'border-rose-400/60 bg-rose-500/10 text-[color:var(--text-main)]' : '',
-                                  !isAnswered ? 'border-[color:var(--card-border)] bg-transparent hover:-translate-y-0.5' : '',
-                                  isAnswered && !isSelected && !isCorrect ? 'border-[color:var(--card-border)] opacity-75' : '',
-                                ].join(' ')}
-                              >
-                                <span className="mr-2 font-['IBM_Plex_Mono'] text-[0.72rem] uppercase tracking-[0.12em] text-[color:var(--accent-soft)]">{option.id}</span>
-                                <span className="whitespace-pre-wrap break-words">{option.text}</span>
-                              </button>
-                            )
-                          })}
-                        </div>
-                        {message.selectedOptionId ? (
-                          <div className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
-                            {message.selectedOptionId === message.quiz.correctOptionId
-                              ? (language === 'pt' ? 'Correto. ' : 'Correct. ')
-                              : (language === 'pt' ? 'Resposta incorreta. ' : 'Incorrect answer. ')}
-                            <ReactMarkdown components={markdownInlineComponents}>{message.quiz.explanation}</ReactMarkdown>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : message.trueFalse ? (
-                      <div className="mt-2 rounded-[18px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
-                        {message.trueFalse.topic ? (
-                          <p className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
-                            {message.trueFalse.topic}
-                          </p>
-                        ) : null}
-                        <div className="mt-1 text-sm font-medium leading-6 text-[color:var(--text-main)]">
-                          <ReactMarkdown components={markdownComponents}>{message.trueFalse.statement}</ReactMarkdown>
-                        </div>
-                        <div className="mt-2 grid grid-cols-2 gap-2">
-                          {[true, false].map((value) => {
-                            const label = value
-                              ? (language === 'pt' ? 'Verdadeiro' : 'True')
-                              : (language === 'pt' ? 'Falso' : 'False')
-                            const isSelected = message.selectedTrueFalse === value
-                            const isAnswered = typeof message.selectedTrueFalse === 'boolean'
-                            const isCorrect = value === message.trueFalse?.correctAnswer
-
-                            return (
-                              <button
-                                key={String(value)}
-                                type="button"
-                                onClick={() => selectTrueFalseOption(message.id, value)}
-                                disabled={isAnswered}
-                                className={[
-                                  'rounded-[14px] border px-2 py-2 text-sm transition',
-                                  isAnswered && isCorrect ? 'border-emerald-400/60 bg-emerald-500/10 text-[color:var(--text-main)]' : '',
-                                  isAnswered && isSelected && !isCorrect ? 'border-rose-400/60 bg-rose-500/10 text-[color:var(--text-main)]' : '',
-                                  !isAnswered ? 'border-[color:var(--card-border)] hover:-translate-y-0.5' : '',
-                                ].join(' ')}
-                              >
-                                {label}
-                              </button>
-                            )
-                          })}
-                        </div>
-                        {typeof message.selectedTrueFalse === 'boolean' ? (
-                          <div className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
-                            {message.selectedTrueFalse === message.trueFalse.correctAnswer
-                              ? (language === 'pt' ? 'Correto. ' : 'Correct. ')
-                              : (language === 'pt' ? 'Resposta incorreta. ' : 'Incorrect answer. ')}
-                            <ReactMarkdown components={markdownInlineComponents}>{message.trueFalse.explanation}</ReactMarkdown>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : message.shortAnswer ? (
-                      <div className="mt-2 rounded-[18px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
-                        {message.shortAnswer.topic ? (
-                          <p className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
-                            {message.shortAnswer.topic}
-                          </p>
-                        ) : null}
-                        <div className="mt-1 text-sm font-medium leading-6 text-[color:var(--text-main)]">
-                          <ReactMarkdown components={markdownComponents}>{message.shortAnswer.question}</ReactMarkdown>
-                        </div>
-                        <div className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
-                          {language === 'pt' ? 'Resposta modelo:' : 'Sample answer:'} {message.shortAnswer.sampleAnswer}
-                        </div>
-                        {message.shortAnswer.evaluationCriteria.length > 0 ? (
-                          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-[color:var(--text-soft)]">
-                            {message.shortAnswer.evaluationCriteria.map((criterion) => (
-                              <li key={criterion}>
-                                <ReactMarkdown components={markdownInlineComponents}>{criterion}</ReactMarkdown>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                        {activeConversation?.mode === 'exam' ? (
-                          <button
-                            type="button"
-                            onClick={() => void generateExamQuestion(activeConversation.id, activeConversation.questionCount + 1)}
-                            disabled={isLoading}
-                            className="mt-2 rounded-full border border-[color:var(--card-border)] px-3 py-2 text-xs text-[color:var(--text-main)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {language === 'pt' ? 'Proxima questao' : 'Next question'}
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <div className="mt-2 text-sm leading-7 text-[color:var(--text-soft)] sm:text-[0.97rem]">
-                        <ReactMarkdown components={markdownComponents}>
-                          {message.text}
-                        </ReactMarkdown>
-                      </div>
-                    )
-                  ) : (
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[color:var(--text-soft)] sm:text-[0.97rem]">{message.text}</p>
-                  )}
-
-                  {message.retryAction ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void retryAssistantMessage(message)}
-                        disabled={isLoading || (message.retryAt ? message.retryAt > nowMs : false)}
-                        className="rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {language === 'pt' ? 'Tentar novamente' : 'Try again'}
-                      </button>
-                      {message.retryAt && message.retryAt > nowMs ? (
-                        <span className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
-                          {language === 'pt'
-                            ? `Disponivel em ${Math.ceil((message.retryAt - nowMs) / 1000)}s`
-                            : `Available in ${Math.ceil((message.retryAt - nowMs) / 1000)}s`}
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </article>
-                </div>
-              ))}
-
-              {isLoading && !hasPendingExamMessage ? (
-                <div className="flex w-full max-w-[700px] justify-start">
-                  <article className="glass-card w-full rounded-[14px] p-2">
-                    <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
-                      Mentor AI
-                    </span>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[color:var(--text-soft)] sm:text-[0.97rem]">
-                      {activeConversation?.mode === 'exam'
-                        ? (language === 'pt' ? 'Gerando proxima questao...' : 'Generating next question...')
-                        : (language === 'pt' ? 'Pensando na melhor resposta...' : 'Thinking about the best response...')}
-                    </p>
-                  </article>
-                </div>
-              ) : null}
-              </div>
-
-            <form onSubmit={handleSubmit} className={[
-              'mt-2 flex',
-              showStickyPassagePanel ? 'justify-start' : 'justify-center',
-            ].join(' ')}>
-              <div className="glass-card w-full max-w-[700px] rounded-[13px] p-2 sm:p-2">
-                <div className="flex items-end gap-2">
-                  <textarea
-                    ref={draftTextareaRef}
-                    value={draft}
-                    onChange={(event) => {
-                      setDraft(event.target.value)
-                      resizeDraftTextarea(event.target)
-                    }}
-                    rows={1}
-                    disabled={isLoading}
-                    placeholder={language === 'pt' ? 'Pergunte algo, peca um plano ou gere uma tarefa' : 'Ask something, request a plan, or generate a task'}
-                    className="app-scroll min-h-12 min-w-0 flex-1 resize-none rounded-[11px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] px-2 py-2 leading-6 text-[color:var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] [&::placeholder]:overflow-hidden [&::placeholder]:text-ellipsis [&::placeholder]:whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-70 focus:border-[color:var(--accent-line)]"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    aria-label={language === 'pt' ? 'Enviar mensagem' : 'Send message'}
-                    className="accent-button inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    <ArrowUp size={16} />
-                  </button>
-                </div>
-              </div>
-            </form>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="relative hidden min-h-0 lg:order-1 lg:block">
-            <div
-              className="relative h-full"
-              onMouseEnter={() => setIsDesktopSidebarHovered(true)}
-              onMouseLeave={() => setIsDesktopSidebarHovered(false)}
-            >
-              <aside className="glass-panel flex h-full w-[88px] flex-col items-center rounded-[24px] px-2 py-3">
-                <button
-                  type="button"
-                  onClick={() => setIsDesktopSidebarPinned((current) => !current)}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-[color:var(--card-border)] bg-transparent text-[color:var(--text-main)] transition hover:-translate-y-0.5"
-                  aria-label={language === 'pt' ? 'Alternar menu lateral' : 'Toggle sidebar'}
-                >
-                  <PanelLeft size={17} />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={openNewConversationModal}
-                  disabled={isLoading}
-                  className="mt-2 inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-[color:var(--card-border)] bg-transparent font-['IBM_Plex_Mono'] text-lg text-[color:var(--text-main)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
-                  aria-label={language === 'pt' ? 'Nova conversa' : 'New chat'}
-                >
-                  +
-                </button>
-
-                <div className="mt-3 h-px w-10 bg-[color:var(--card-border)]" />
-
-                <span className="mt-2 font-['IBM_Plex_Mono'] text-[0.62rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
-                  {language === 'pt' ? 'Menu' : 'Menu'}
-                </span>
-              </aside>
-
-              <aside
-                className={[
-                  'glass-panel app-scroll absolute left-[96px] top-0 z-20 h-full w-[320px] overflow-y-auto rounded-[24px] p-3 transition-all duration-200',
-                  isDesktopSidebarOpen ? 'pointer-events-auto translate-x-0 opacity-100' : 'pointer-events-none -translate-x-2 opacity-0',
-                ].join(' ')}
-              >
-                <section className="rounded-[20px] border border-[color:var(--card-border)] bg-transparent p-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="section-label">{language === 'pt' ? 'Conversas' : 'Conversations'}</span>
-                    <button
-                      type="button"
-                      onClick={openNewConversationModal}
-                      disabled={isLoading}
-                      className="inline-flex items-center rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      {t.newChat}
-                    </button>
-                  </div>
-
-                  <div className="mt-3 grid min-w-0 gap-2">
-                    {conversationList.length > 0 ? conversationList.map((conversation, index) => (
-                      <button
-                        key={conversation.id}
-                        type="button"
-                        onClick={() => setActiveConversationId(conversation.id)}
-                        className={[
-                          'glass-card w-full min-w-0 rounded-[18px] p-2 text-left',
-                          conversation.id === activeConversationId ? 'border-[color:var(--accent-line)]/45' : '',
-                        ].join(' ')}
-                      >
-                        <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
-                          {conversation.title || `${t.newChat} ${conversationList.length - index}`}
-                        </p>
-                      </button>
-                    )) : (
-                      <article className="glass-card rounded-[18px] p-2 text-sm leading-6 text-[color:var(--text-muted)]">
-                        {language === 'pt'
-                          ? 'As conversas vao aparecer aqui conforme voce usa o chat.'
-                          : 'Conversations appear here as you keep using the chat.'}
-                      </article>
-                    )}
-                  </div>
-                </section>
-
-                <section className="mt-2 rounded-[20px] border border-[color:var(--card-border)] bg-transparent p-2">
-                  <span className="section-label">{language === 'pt' ? 'Tipo de resposta' : 'Response type'}</span>
-                  <div className="mt-2 grid gap-2">
-                    {responseModeOptions.map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setResponseMode(mode)}
-                        className={[
-                          'rounded-[14px] border px-2 py-2 text-left text-sm transition hover:-translate-y-0.5',
-                          responseMode === mode
-                            ? 'border-[color:var(--accent-line)]/55 bg-[color:var(--input-bg)] text-[color:var(--text-main)]'
-                            : 'border-[color:var(--card-border)] bg-transparent text-[color:var(--text-soft)]',
-                        ].join(' ')}
-                      >
-                        {responseModeLabel[language][mode]}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="mt-2 rounded-[20px] border border-[color:var(--card-border)] bg-transparent p-2">
-                  <span className="section-label">{language === 'pt' ? 'Conta e nuvem' : 'Account & cloud'}</span>
-
-                  {!isSupabaseConfigured ? (
-                    <p className="mt-2 text-sm leading-6 text-[color:var(--text-muted)]">
-                      {language === 'pt'
-                        ? 'Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY para ativar login.'
-                        : 'Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to enable auth.'}
-                    </p>
-                  ) : session ? (
-                    <div className="mt-2 grid gap-2">
-                      <p className="text-sm text-[color:var(--text-main)]">{session.user.email}</p>
-                      <p className="text-xs text-[color:var(--text-muted)]">
-                        {userPlan === 'pro'
-                          ? (isCloudSyncEnabled
-                              ? (language === 'pt' ? 'Sincronizacao ativa' : 'Cloud sync enabled')
-                              : (language === 'pt' ? 'Sincronizacao pausada' : 'Cloud sync paused'))
-                          : (language === 'pt' ? 'Plano free: dados locais (sem nuvem)' : 'Free plan: local data only (no cloud sync)')}
-                        {cloudSyncTimeText
-                          ? ` • ${language === 'pt' ? 'Ultimo sync' : 'Last sync'}: ${cloudSyncTimeText}`
-                          : ''}
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={userPlan !== 'pro'}
-                          onClick={() => setIsCloudSyncEnabled((current) => !current)}
-                          className="rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs text-[color:var(--text-main)] disabled:opacity-60"
-                        >
-                          {isCloudSyncEnabled
-                            ? (language === 'pt' ? 'Pausar nuvem' : 'Pause cloud')
-                            : (language === 'pt' ? 'Ativar nuvem' : 'Enable cloud')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { void signOutFromCloud() }}
-                          className="rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs text-[color:var(--text-main)]"
-                        >
-                          {language === 'pt' ? 'Sair' : 'Sign out'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-2 grid gap-2">
-                      <input
-                        type="email"
-                        value={authEmail}
-                        onChange={(event) => setAuthEmail(event.target.value)}
-                        placeholder={language === 'pt' ? 'Seu email' : 'Your email'}
-                        className="rounded-[12px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
-                      />
-                      <input
-                        type="password"
-                        value={authPassword}
-                        onChange={(event) => setAuthPassword(event.target.value)}
-                        placeholder={language === 'pt' ? 'Sua senha' : 'Your password'}
-                        className="rounded-[12px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2 py-2 text-sm text-[color:var(--text-main)] outline-none"
-                      />
-                      {authError ? (
-                        <p className="text-xs text-[color:var(--text-muted)]">{authError}</p>
-                      ) : null}
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={isAuthBusy}
-                          onClick={() => { void signInWithGoogle() }}
-                          className="rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs text-[color:var(--text-main)] disabled:opacity-60"
-                        >
-                          {language === 'pt' ? 'Google' : 'Google'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isAuthBusy}
-                          onClick={() => { void signInWithEmail() }}
-                          className="rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs text-[color:var(--text-main)] disabled:opacity-60"
-                        >
-                          {language === 'pt' ? 'Entrar' : 'Sign in'}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isAuthBusy}
-                          onClick={() => { void signUpWithEmail() }}
-                          className="rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs text-[color:var(--text-main)] disabled:opacity-60"
-                        >
-                          {language === 'pt' ? 'Criar conta' : 'Create account'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </section>
-              </aside>
-            </div>
-          </section>
-        </div>
-
-        {isMobileConversationMenuOpen ? (
-          <div
-            className="fixed inset-0 z-40 bg-black/45 lg:hidden"
-            onClick={() => setIsMobileConversationMenuOpen(false)}
-          >
-            <aside
-              className="glass-panel app-scroll absolute inset-y-0 left-0 flex w-[88%] max-w-sm flex-col overflow-y-auto rounded-r-[28px] p-3"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center justify-between gap-2 border-b border-[color:var(--panel-border)] pb-3">
-                <button
-                  type="button"
-                  onClick={() => setIsMobileConversationMenuOpen(false)}
-                  className="inline-flex items-center gap-2 rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)]"
-                >
-                  <ArrowLeft size={14} />
-                  {language === 'pt' ? 'Voltar' : 'Back'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScreen('landing')
-                    setIsMobileConversationMenuOpen(false)
-                  }}
-                  className="inline-flex items-center rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)]"
-                >
-                  {language === 'pt' ? 'Inicio' : 'Home'}
-                </button>
-              </div>
-
-              <section className="mt-3 rounded-[24px] border border-[color:var(--card-border)] p-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="section-label">{language === 'pt' ? 'Conversas' : 'Conversations'}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      openNewConversationModal()
-                      setIsMobileConversationMenuOpen(false)
-                    }}
-                    className="inline-flex items-center rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)]"
-                  >
-                    {t.newChat}
-                  </button>
-                </div>
-
-                <div className="mt-3 grid min-w-0 gap-2">
-                  {conversationList.map((conversation, index) => (
-                    <button
-                      key={conversation.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveConversationId(conversation.id)
-                        setIsMobileConversationMenuOpen(false)
-                      }}
-                      className={[
-                        'glass-card w-full min-w-0 rounded-[18px] p-2 text-left',
-                        conversation.id === activeConversationId ? 'border-[color:var(--accent-line)]/45' : '',
-                      ].join(' ')}
-                    >
-                      <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
-                        {conversation.title || `${t.newChat} ${conversationList.length - index}`}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="mt-2 rounded-[24px] border border-[color:var(--card-border)] p-2">
-                <span className="section-label">{language === 'pt' ? 'Tipo de resposta' : 'Response type'}</span>
-                <div className="mt-2 grid gap-2">
-                  {responseModeOptions.map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setResponseMode(mode)}
-                      className={[
-                        'rounded-[14px] border px-2 py-2 text-left text-sm',
-                        responseMode === mode
-                          ? 'border-[color:var(--accent-line)]/55 bg-[color:var(--input-bg)] text-[color:var(--text-main)]'
-                          : 'border-[color:var(--card-border)] bg-transparent text-[color:var(--text-soft)]',
-                      ].join(' ')}
-                    >
-                      {responseModeLabel[language][mode]}
-                    </button>
-                  ))}
-                </div>
-              </section>
-            </aside>
-          </div>
-        ) : null}
-          </>
+          <ChatWorkspace
+            language={language}
+            t={t}
+            isDesktopSidebarPinned={isDesktopSidebarPinned}
+            isDesktopSidebarOpen={isDesktopSidebarOpen}
+            setIsDesktopSidebarPinned={setIsDesktopSidebarPinned}
+            setIsDesktopSidebarHovered={setIsDesktopSidebarHovered}
+            isMobileConversationMenuOpen={isMobileConversationMenuOpen}
+            setIsMobileConversationMenuOpen={setIsMobileConversationMenuOpen}
+            openNewConversationModal={openNewConversationModal}
+            isLoading={isLoading}
+            conversationList={conversationList.map((conversation) => ({ id: conversation.id, title: conversation.title }))}
+            activeConversationId={activeConversationId}
+            setActiveConversationId={setActiveConversationId}
+            responseModeOptions={responseModeOptions}
+            responseMode={responseMode}
+            setResponseMode={setResponseMode}
+            responseModeLabel={responseModeLabel}
+            setScreen={setScreen}
+            sessionEmail={session?.user.email}
+            showStickyPassagePanel={showStickyPassagePanel}
+            examPassage={activeConversation?.examPassage}
+            visibleMessages={visibleMessages}
+            selectQuizOption={selectQuizOption}
+            selectTrueFalseOption={selectTrueFalseOption}
+            retryAssistantMessage={retryAssistantMessage}
+            nowMs={nowMs}
+            markdownComponents={markdownComponents}
+            markdownInlineComponents={markdownInlineComponents}
+            activeConversation={activeConversation}
+            generateExamQuestion={generateExamQuestion}
+            hasPendingExamMessage={hasPendingExamMessage}
+            draft={draft}
+            setDraft={setDraft}
+            resizeDraftTextarea={resizeDraftTextarea}
+            draftTextareaRef={draftTextareaRef}
+            handleSubmit={handleSubmit}
+            userPlan={userPlan}
+            isCloudSyncEnabled={isCloudSyncEnabled}
+            setIsCloudSyncEnabled={setIsCloudSyncEnabled}
+            cloudSyncTimeText={cloudSyncTimeText}
+            signOutFromCloud={signOutFromCloud}
+            authEmail={authEmail}
+            setAuthEmail={setAuthEmail}
+            authPassword={authPassword}
+            setAuthPassword={setAuthPassword}
+            authError={authError}
+            isAuthBusy={isAuthBusy}
+            signInWithGoogle={signInWithGoogle}
+            signInWithEmail={signInWithEmail}
+            signUpWithEmail={signUpWithEmail}
+          />
         )}
       </main>
 
-      {isNewConversationModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3">
-          <div className="glass-panel w-full max-w-xl rounded-[24px] p-3">
-            <h2 className="font-['Space_Grotesk'] text-[1.25rem] font-bold text-[color:var(--text-main)]">
-              {language === 'pt' ? 'Nova conversa' : 'New conversation'}
-            </h2>
-            <p className="mt-1 text-sm text-[color:var(--text-muted)]">
-              {language === 'pt'
-                ? 'No modo prova, voce pode escolher perfil, formato e dificuldade. O assunto e opcional.'
-                : 'In exam mode, you can choose profile, format, and difficulty. Topic is optional.'}
-            </p>
-
-            <div className="mt-3 grid gap-2">
-              <label className="text-xs uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
-                {language === 'pt' ? 'Tipo de conversa' : 'Conversation type'}
-              </label>
-              <select
-                value={newConversationMode}
-                onChange={(event) => setNewConversationMode(event.target.value as ConversationMode)}
-                className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none"
-              >
-                {(['chat', 'exam'] as const).map((mode) => (
-                  <option key={mode} value={mode}>{conversationModeLabel[language][mode]}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="mt-3 grid gap-2">
-              <label className="text-xs uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
-                {language === 'pt' ? 'Assunto da prova (opcional)' : 'Exam topic (optional)'}
-              </label>
-              <input
-                value={newConversationTopic}
-                onChange={(event) => setNewConversationTopic(event.target.value)}
-                placeholder={language === 'pt' ? 'Ex.: Historia de Portugal' : 'e.g. History of Portugal'}
-                className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none"
-              />
-            </div>
-
-            <div className="mt-3 grid gap-2">
-              <label className="text-xs uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
-                {language === 'pt' ? 'Perfil da prova' : 'Exam profile'}
-              </label>
-              <select
-                value={newConversationExamProfile}
-                onChange={(event) => setNewConversationExamProfile(event.target.value as ExamProfile)}
-                disabled={newConversationMode !== 'exam'}
-                className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none disabled:opacity-60"
-              >
-                {(['general', 'enem'] as const).map((profile) => (
-                  <option key={profile} value={profile}>{examProfileLabel[language][profile]}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="mt-3 grid gap-2">
-              <label className="text-xs uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
-                {language === 'pt' ? 'Formato da prova' : 'Exam format'}
-              </label>
-              <select
-                value={newConversationExamFlow}
-                onChange={(event) => setNewConversationExamFlow(event.target.value as ExamFlow)}
-                disabled={newConversationMode !== 'exam'}
-                className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none disabled:opacity-60"
-              >
-                {(['single', 'passage'] as const).map((flow) => (
-                  <option key={flow} value={flow}>{examFlowLabel[language][flow]}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="mt-3 grid gap-2">
-              <label className="text-xs uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
-                {language === 'pt' ? 'Dificuldade' : 'Difficulty'}
-              </label>
-              <select
-                value={newConversationDifficulty}
-                onChange={(event) => setNewConversationDifficulty(event.target.value as DifficultyLevel)}
-                disabled={newConversationMode !== 'exam'}
-                className="rounded-[14px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--text-main)] outline-none disabled:opacity-60"
-              >
-                {(['auto', 'easy', 'medium', 'hard'] as const).map((difficulty) => (
-                  <option key={difficulty} value={difficulty}>{difficultyLabel[language][difficulty]}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeNewConversationModal}
-                className="rounded-full border border-[color:var(--card-border)] px-3 py-2 text-sm text-[color:var(--text-main)]"
-              >
-                {language === 'pt' ? 'Cancelar' : 'Cancel'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { void startNewConversation() }}
-                className="accent-button rounded-full px-3 py-2 text-sm font-semibold text-white"
-              >
-                {language === 'pt' ? 'Criar conversa' : 'Create conversation'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <NewConversationModal
+        language={language}
+        isOpen={isNewConversationModalOpen}
+        mode={newConversationMode}
+        topic={newConversationTopic}
+        examProfile={newConversationExamProfile}
+        examFlow={newConversationExamFlow}
+        difficulty={newConversationDifficulty}
+        conversationModeLabel={conversationModeLabel}
+        examProfileLabel={examProfileLabel}
+        examFlowLabel={examFlowLabel}
+        difficultyLabel={difficultyLabel}
+        onModeChange={setNewConversationMode}
+        onTopicChange={setNewConversationTopic}
+        onExamProfileChange={setNewConversationExamProfile}
+        onExamFlowChange={setNewConversationExamFlow}
+        onDifficultyChange={setNewConversationDifficulty}
+        onCancel={closeNewConversationModal}
+        onCreate={() => { void startNewConversation() }}
+      />
 
     </div>
   )
