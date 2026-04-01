@@ -1,45 +1,31 @@
 import { ArrowLeft } from 'lucide-react'
-import type { ResponseMode } from '../../types/chat'
+import { useChatWorkspaceContext } from '../../context/ChatWorkspaceContext'
 
-interface MobileDrawerProps {
-  language: 'pt' | 'en'
-  isOpen: boolean
-  onClose: () => void
-  onGoHome: () => void
-  conversationList: Array<{ id: string; title: string }>
-  activeConversationId: string
-  onSelectConversation: (id: string) => void
-  onOpenNewConversation: () => void
-  newChatLabel: string
-  responseModeOptions: ResponseMode[]
-  responseMode: ResponseMode
-  setResponseMode: (mode: ResponseMode) => void
-  responseModeLabel: Record<'pt' | 'en', Record<ResponseMode, string>>
-}
+export function MobileDrawer() {
+  const {
+    language,
+    t,
+    isMobileConversationMenuOpen,
+    setIsMobileConversationMenuOpen,
+    setScreen,
+    conversationList,
+    activeConversationId,
+    setActiveConversationId,
+    openNewConversationModal,
+    responseModeOptions,
+    responseMode,
+    setResponseMode,
+    responseModeLabel,
+  } = useChatWorkspaceContext()
 
-export function MobileDrawer({
-  language,
-  isOpen,
-  onClose,
-  onGoHome,
-  conversationList,
-  activeConversationId,
-  onSelectConversation,
-  onOpenNewConversation,
-  newChatLabel,
-  responseModeOptions,
-  responseMode,
-  setResponseMode,
-  responseModeLabel,
-}: MobileDrawerProps) {
-  if (!isOpen) {
+  if (!isMobileConversationMenuOpen) {
     return null
   }
 
   return (
     <div
       className="fixed inset-0 z-40 bg-black/45 lg:hidden"
-      onClick={onClose}
+      onClick={() => setIsMobileConversationMenuOpen(false)}
     >
       <aside
         className="glass-panel app-scroll absolute inset-y-0 left-0 flex w-[88%] max-w-sm flex-col overflow-y-auto rounded-r-[28px] p-3"
@@ -48,7 +34,7 @@ export function MobileDrawer({
         <div className="flex items-center justify-between gap-2 border-b border-[color:var(--panel-border)] pb-3">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => setIsMobileConversationMenuOpen(false)}
             className="inline-flex items-center gap-2 rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)]"
           >
             <ArrowLeft size={14} />
@@ -56,7 +42,10 @@ export function MobileDrawer({
           </button>
           <button
             type="button"
-            onClick={onGoHome}
+            onClick={() => {
+              setScreen('landing')
+              setIsMobileConversationMenuOpen(false)
+            }}
             className="inline-flex items-center rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)]"
           >
             {language === 'pt' ? 'Inicio' : 'Home'}
@@ -68,10 +57,13 @@ export function MobileDrawer({
             <span className="section-label">{language === 'pt' ? 'Conversas' : 'Conversations'}</span>
             <button
               type="button"
-              onClick={onOpenNewConversation}
+              onClick={() => {
+                openNewConversationModal()
+                setIsMobileConversationMenuOpen(false)
+              }}
               className="inline-flex items-center rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)]"
             >
-              {newChatLabel}
+              {t.newChat}
             </button>
           </div>
 
@@ -80,14 +72,17 @@ export function MobileDrawer({
               <button
                 key={conversation.id}
                 type="button"
-                onClick={() => onSelectConversation(conversation.id)}
+                onClick={() => {
+                  setActiveConversationId(conversation.id)
+                  setIsMobileConversationMenuOpen(false)
+                }}
                 className={[
                   'glass-card w-full min-w-0 rounded-[18px] p-2 text-left',
                   conversation.id === activeConversationId ? 'border-[color:var(--accent-line)]/45' : '',
                 ].join(' ')}
               >
                 <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
-                  {conversation.title || `${newChatLabel} ${conversationList.length - index}`}
+                  {conversation.title || `${t.newChat} ${conversationList.length - index}`}
                 </p>
               </button>
             ))}

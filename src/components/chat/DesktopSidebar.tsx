@@ -1,41 +1,10 @@
 import { PanelLeft } from 'lucide-react'
-import type { ResponseMode } from '../../types/chat'
+import { useChatWorkspaceContext } from '../../context/ChatWorkspaceContext'
 
-interface DesktopSidebarProps {
-  language: 'pt' | 'en'
-  isDesktopSidebarOpen: boolean
-  setIsDesktopSidebarPinned: (updater: (current: boolean) => boolean) => void
-  setIsDesktopSidebarHovered: (value: boolean) => void
-  openNewConversationModal: () => void
-  isLoading: boolean
-  conversationList: Array<{ id: string; title: string }>
-  activeConversationId: string
-  setActiveConversationId: (id: string) => void
-  responseModeOptions: ResponseMode[]
-  responseMode: ResponseMode
-  setResponseMode: (mode: ResponseMode) => void
-  responseModeLabel: Record<'pt' | 'en', Record<ResponseMode, string>>
-  newChatLabel: string
-  userPlan: 'free' | 'pro'
-  isCloudSyncEnabled: boolean
-  setIsCloudSyncEnabled: (updater: (current: boolean) => boolean) => void
-  cloudSyncTimeText: string
-  sessionEmail?: string
-  signOutFromCloud: () => Promise<void>
-  authEmail: string
-  setAuthEmail: (value: string) => void
-  authPassword: string
-  setAuthPassword: (value: string) => void
-  authError: string
-  isAuthBusy: boolean
-  signInWithGoogle: (language: 'pt' | 'en') => Promise<void>
-  signInWithEmail: (email: string, password: string, language: 'pt' | 'en') => Promise<void>
-  signUpWithEmail: (email: string, password: string, language: 'pt' | 'en') => Promise<void>
-}
-
-export function DesktopSidebar(props: DesktopSidebarProps) {
+export function DesktopSidebar() {
   const {
     language,
+    t,
     isDesktopSidebarOpen,
     setIsDesktopSidebarPinned,
     setIsDesktopSidebarHovered,
@@ -48,7 +17,6 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
     responseMode,
     setResponseMode,
     responseModeLabel,
-    newChatLabel,
     userPlan,
     isCloudSyncEnabled,
     setIsCloudSyncEnabled,
@@ -64,7 +32,7 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
     signInWithGoogle,
     signInWithEmail,
     signUpWithEmail,
-  } = props
+  } = useChatWorkspaceContext()
 
   return (
     <section className="relative hidden min-h-0 lg:order-1 lg:block">
@@ -115,7 +83,7 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
                 disabled={isLoading}
                 className="inline-flex items-center rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {newChatLabel}
+                {t.newChat}
               </button>
             </div>
 
@@ -131,7 +99,7 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
                   ].join(' ')}
                 >
                   <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
-                    {conversation.title || `${newChatLabel} ${conversationList.length - index}`}
+                    {conversation.title || `${t.newChat} ${conversationList.length - index}`}
                   </p>
                 </button>
               )) : (

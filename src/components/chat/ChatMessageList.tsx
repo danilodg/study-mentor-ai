@@ -1,52 +1,30 @@
-import type { FormEvent, RefObject } from 'react'
-import type { Components } from 'react-markdown'
 import ReactMarkdown from 'react-markdown'
 import { ArrowUp } from 'lucide-react'
-import type { Conversation, Message, QuizOptionId } from '../../types/chat'
+import { useChatWorkspaceContext } from '../../context/ChatWorkspaceContext'
 
-interface ChatMessageListProps {
-  language: 'pt' | 'en'
-  showStickyPassagePanel: boolean
-  examPassage?: string
-  visibleMessages: Message[]
-  selectQuizOption: (messageId: string, optionId: QuizOptionId) => void
-  selectTrueFalseOption: (messageId: string, selectedValue: boolean) => void
-  retryAssistantMessage: (message: Message) => Promise<void>
-  nowMs: number
-  markdownComponents: Components
-  markdownInlineComponents: Components
-  activeConversation?: Conversation
-  generateExamQuestion: (conversationId: string, nextQuestionNumber: number) => Promise<void>
-  hasPendingExamMessage: boolean
-  isLoading: boolean
-  draft: string
-  setDraft: (value: string) => void
-  resizeDraftTextarea: (element: HTMLTextAreaElement) => void
-  draftTextareaRef: RefObject<HTMLTextAreaElement | null>
-  handleSubmit: (event: FormEvent<HTMLFormElement>) => void
-}
+export function ChatMessageList() {
+  const {
+    language,
+    showStickyPassagePanel,
+    examPassage,
+    visibleMessages,
+    selectQuizOption,
+    selectTrueFalseOption,
+    retryAssistantMessage,
+    nowMs,
+    markdownComponents,
+    markdownInlineComponents,
+    activeConversation,
+    generateExamQuestion,
+    hasPendingExamMessage,
+    isLoading,
+    draft,
+    setDraft,
+    resizeDraftTextarea,
+    draftTextareaRef,
+    handleSubmit,
+  } = useChatWorkspaceContext()
 
-export function ChatMessageList({
-  language,
-  showStickyPassagePanel,
-  examPassage,
-  visibleMessages,
-  selectQuizOption,
-  selectTrueFalseOption,
-  retryAssistantMessage,
-  nowMs,
-  markdownComponents,
-  markdownInlineComponents,
-  activeConversation,
-  generateExamQuestion,
-  hasPendingExamMessage,
-  isLoading,
-  draft,
-  setDraft,
-  resizeDraftTextarea,
-  draftTextareaRef,
-  handleSubmit,
-}: ChatMessageListProps) {
   return (
     <div className="mt-2 min-h-0 flex-1 overflow-hidden sm:mt-3 lg:mt-4">
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[980px] flex-col overflow-hidden lg:flex-row lg:gap-2">

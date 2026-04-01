@@ -41,6 +41,62 @@
   button {
     cursor: pointer;
   }
+
+  .app-theme-dark {
+    --page-bg: #050916;
+    --page-gradient: linear-gradient(180deg, #040716 0%, #071028 45%, #060917 100%);
+    --page-radial: rgba(37, 60, 148, 0.45);
+    --grid-color: rgba(112, 151, 255, 0.07);
+    --glow-left: rgba(72, 205, 255, 0.42);
+    --glow-right: rgba(138, 92, 255, 0.34);
+    --glow-bottom-left: rgba(55, 119, 255, 0.25);
+    --glow-bottom-right: rgba(57, 176, 255, 0.18);
+    --text-main: #f8fbff;
+    --text-soft: #c5d0ef;
+    --text-muted: #94a3c7;
+    --panel-border: rgba(255, 255, 255, 0.1);
+    --panel-bg: linear-gradient(180deg, rgba(18, 29, 76, 0.76), rgba(8, 14, 37, 0.62));
+    --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 28px 80px rgba(2, 6, 20, 0.45), 0 0 0 1px rgba(59, 87, 180, 0.12);
+    --card-border: rgba(127, 160, 255, 0.24);
+    --card-bg: linear-gradient(180deg, rgba(29, 45, 108, 0.28), rgba(8, 14, 37, 0.16));
+    --card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 18px 60px rgba(7, 12, 32, 0.38);
+    --input-bg: rgba(9, 16, 43, 0.52);
+    --input-border: rgba(255, 255, 255, 0.1);
+    --accent-soft: #9be8ff;
+    --accent-line: #7ee7ff;
+    --accent-start: #6fe0ff;
+    --accent-mid: #687eff;
+    --accent-end: #8b66ff;
+    --accent-shadow: rgba(72, 133, 255, 0.35);
+  }
+
+  .app-theme-light {
+    --page-bg: #edf4ff;
+    --page-gradient: linear-gradient(180deg, #f9fbff 0%, #edf4ff 42%, #e4eeff 100%);
+    --page-radial: rgba(87, 151, 255, 0.22);
+    --grid-color: rgba(74, 113, 205, 0.08);
+    --glow-left: rgba(98, 201, 255, 0.24);
+    --glow-right: rgba(131, 118, 255, 0.18);
+    --glow-bottom-left: rgba(88, 137, 255, 0.16);
+    --glow-bottom-right: rgba(56, 177, 255, 0.14);
+    --text-main: #13203f;
+    --text-soft: #42557d;
+    --text-muted: #607297;
+    --panel-border: rgba(130, 155, 222, 0.22);
+    --panel-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(232, 240, 255, 0.74));
+    --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 24px 70px rgba(84, 113, 173, 0.14), 0 0 0 1px rgba(132, 161, 226, 0.1);
+    --card-border: rgba(126, 156, 226, 0.26);
+    --card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(232, 240, 255, 0.42));
+    --card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 16px 40px rgba(90, 118, 170, 0.14), 0 0 24px rgba(133, 188, 255, 0.14);
+    --input-bg: rgba(255, 255, 255, 0.84);
+    --input-border: rgba(126, 156, 226, 0.2);
+    --accent-soft: #1b78d4;
+    --accent-line: #49a6ff;
+    --accent-start: #38bdf8;
+    --accent-mid: #4f7cff;
+    --accent-end: #7c69ff;
+    --accent-shadow: rgba(88, 137, 255, 0.24);
+  }
 }
 
 @layer utilities {
