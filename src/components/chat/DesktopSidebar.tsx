@@ -1,5 +1,6 @@
 import { PanelLeft } from 'lucide-react'
 import { useChatWorkspaceContext } from '../../context/ChatWorkspaceContext'
+import { getConversationDisplayTitle } from '../../utils/conversation'
 
 export function DesktopSidebar() {
   const {
@@ -99,7 +100,7 @@ export function DesktopSidebar() {
                   ].join(' ')}
                 >
                   <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
-                    {conversation.title || `${t.newChat} ${conversationList.length - index}`}
+                    {getConversationDisplayTitle(conversation.title, t.newChat, conversationList.length, index)}
                   </p>
                 </button>
               )) : (

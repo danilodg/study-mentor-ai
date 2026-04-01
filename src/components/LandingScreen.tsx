@@ -1,4 +1,5 @@
 import { BookOpenText, BrainCircuit, ClipboardList } from 'lucide-react'
+import { getConversationDisplayTitle } from '../utils/conversation'
 
 interface LandingConversation {
   id: string
@@ -76,7 +77,7 @@ export function LandingScreen({
                 className="glass-card w-full min-w-0 rounded-[20px] border border-[color:var(--card-border)] bg-transparent p-2 text-left transition hover:-translate-y-0.5"
               >
                 <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
-                  {conversation.title || `${t.newChat} ${conversationList.length - index}`}
+                  {getConversationDisplayTitle(conversation.title, t.newChat, conversationList.length, index)}
                 </p>
               </button>
             )) : (

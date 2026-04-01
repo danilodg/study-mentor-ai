@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react'
 import type { FormEvent, RefObject, ReactNode } from 'react'
 import type { Components } from 'react-markdown'
-import type { Conversation, CopyBlock, Message, QuizOptionId, ResponseMode, Screen } from '../types/chat'
+import type { Conversation, CopyBlock, Message, QuizOptionId, ResponseMode } from '../types/chat'
 
 export interface ChatWorkspaceContextValue {
   language: 'pt' | 'en'
@@ -21,7 +21,6 @@ export interface ChatWorkspaceContextValue {
   responseMode: ResponseMode
   setResponseMode: (mode: ResponseMode) => void
   responseModeLabel: Record<'pt' | 'en', Record<ResponseMode, string>>
-  setScreen: (screen: Screen) => void
   sessionEmail?: string
   showStickyPassagePanel: boolean
   examPassage?: string

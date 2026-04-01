@@ -1,13 +1,15 @@
 import { ArrowLeft } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useChatWorkspaceContext } from '../../context/ChatWorkspaceContext'
+import { getConversationDisplayTitle } from '../../utils/conversation'
 
 export function MobileDrawer() {
+  const navigate = useNavigate()
   const {
     language,
     t,
     isMobileConversationMenuOpen,
     setIsMobileConversationMenuOpen,
-    setScreen,
     conversationList,
     activeConversationId,
     setActiveConversationId,
@@ -43,7 +45,7 @@ export function MobileDrawer() {
           <button
             type="button"
             onClick={() => {
-              setScreen('landing')
+              navigate('/')
               setIsMobileConversationMenuOpen(false)
             }}
             className="inline-flex items-center rounded-full border border-[color:var(--card-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)]"
@@ -82,7 +84,7 @@ export function MobileDrawer() {
                 ].join(' ')}
               >
                 <p className="text-sm font-medium break-words text-[color:var(--text-main)]">
-                  {conversation.title || `${t.newChat} ${conversationList.length - index}`}
+                  {getConversationDisplayTitle(conversation.title, t.newChat, conversationList.length, index)}
                 </p>
               </button>
             ))}

@@ -1,13 +1,14 @@
 import { ArrowLeft, PanelLeft, Sparkles } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useChatWorkspaceContext } from '../../context/ChatWorkspaceContext'
 
 export function ChatHeader() {
+  const navigate = useNavigate()
   const {
     language,
     t,
     sessionEmail,
     setIsMobileConversationMenuOpen,
-    setScreen,
   } = useChatWorkspaceContext()
 
   return (
@@ -29,7 +30,7 @@ export function ChatHeader() {
       <div className="flex items-center gap-2 sm:gap-3">
         <button
           type="button"
-          onClick={() => setScreen(sessionEmail ? 'profile' : 'auth')}
+          onClick={() => navigate(sessionEmail ? '/profile' : '/auth')}
           className="inline-flex items-center rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-xs font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 sm:text-sm"
         >
           {sessionEmail
@@ -38,7 +39,7 @@ export function ChatHeader() {
         </button>
         <button
           type="button"
-          onClick={() => setScreen('landing')}
+          onClick={() => navigate('/')}
           className="hidden items-center gap-2 rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-2 text-sm font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 lg:inline-flex"
         >
           <ArrowLeft size={16} />

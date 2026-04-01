@@ -1,24 +1,15 @@
 import { useEffect } from 'react'
 import { MoonStar, SunMedium } from 'lucide-react'
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import {
-  conversationModeLabel,
-  difficultyLabel,
-  examFlowLabel,
-  examProfileLabel,
-  responseModeLabel,
-  responseModeOptions,
-} from './content/copy'
-import type { Screen } from './types/chat'
-import { markdownComponents, markdownInlineComponents } from './utils/markdown'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useChatApp } from './hooks/useChatApp'
-import { NewConversationModal } from './components/NewConversationModal'
-import { LandingPage } from './pages/LandingPage'
-import { AuthPage } from './pages/AuthPage'
-import { ProfilePage } from './pages/ProfilePage'
-import { ChatPage } from './pages/ChatPage'
+import { AppProvider } from './context/AppContext'
+import { AppNewConversationModal } from './features/chat/components/AppNewConversationModal'
+import { LandingPage } from './features/landing/page/LandingPage'
+import { AuthPage } from './features/auth/page/AuthPage'
+import { ProfilePage } from './features/profile/page/ProfilePage'
+import { ChatPage } from './features/chat/page/ChatPage'
 
-function App() {
+function AppRoutes() {
   const navigate = useNavigate()
   const location = useLocation()
   const app = useChatApp()
@@ -42,34 +33,19 @@ function App() {
     app.setIsMobileConversationMenuOpen,
   ])
 
-  function setScreen(screen: Screen) {
-    const nextPath = screen === 'landing'
-      ? '/'
-      : `/${screen}`
-    navigate(nextPath)
-  }
-
-  function goToChatWithAuthGate() {
-    if (app.isSupabaseConfigured && !app.session) {
-      navigate('/auth')
-      return
-    }
-
-    navigate('/chat')
-  }
-
   const conversationSummaries = app.conversationList.map((conversation) => ({
     id: conversation.id,
     title: conversation.title,
   }))
 
   return (
-    <div
-      className={[
-        'min-h-screen overflow-hidden bg-[var(--page-bg)] text-[color:var(--text-soft)] [font-family:Outfit,Segoe_UI,sans-serif] transition-colors duration-300',
-        app.theme === 'dark' ? 'app-theme-dark' : 'app-theme-light',
-      ].join(' ')}
-    >
+    <AppProvider value={{ app, conversationSummaries }}>
+      <div
+        className={[
+          'min-h-screen overflow-hidden bg-[var(--page-bg)] text-[color:var(--text-soft)] [font-family:Outfit,Segoe_UI,sans-serif] transition-colors duration-300',
+          app.theme === 'dark' ? 'app-theme-dark' : 'app-theme-light',
+        ].join(' ')}
+      >
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_14%,var(--page-radial),transparent_36%),var(--page-gradient)]" />
       <div className="pointer-events-none fixed inset-0 grid-mask opacity-35" />
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_16%,var(--glow-left),transparent_26%)] blur-3xl" />
@@ -131,162 +107,25 @@ function App() {
         location.pathname === '/' ? 'max-w-[1180px]' : 'max-w-[1880px]',
       ].join(' ')}>
         <Routes>
-          <Route
-            path="/"
-            element={(
-              <LandingPage
-                language={app.language}
-                t={app.t}
-                sessionEmail={app.session?.user.email}
-                conversationList={conversationSummaries}
-                onOpenNewConversation={app.openNewConversationModal}
-                onSelectConversation={(conversationId) => {
-                  app.setActiveConversationId(conversationId)
-                  app.setDraft('')
-                  goToChatWithAuthGate()
-                }}
-                onPrimaryAction={goToChatWithAuthGate}
-                onSecondaryAction={() => {
-                  app.setDraft(app.t.quickPrompts[1])
-                  goToChatWithAuthGate()
-                }}
-                onAccountAction={() => navigate(app.session ? '/profile' : '/auth')}
-                onQuickPromptAction={(prompt) => {
-                  void app.submitMessage(prompt)
-                  goToChatWithAuthGate()
-                }}
-              />
-            )}
-          />
-          <Route
-            path="/auth"
-            element={(
-              <AuthPage
-                language={app.language}
-                isSupabaseConfigured={app.isSupabaseConfigured}
-                authEmail={app.authEmail}
-                authPassword={app.authPassword}
-                authError={app.authError}
-                isAuthBusy={app.isAuthBusy}
-                onAuthEmailChange={app.setAuthEmail}
-                onAuthPasswordChange={app.setAuthPassword}
-                onSignInWithGoogle={() => { void app.signInWithGoogle(app.language) }}
-                onSignInWithEmail={() => { void app.signInWithEmail(app.authEmail, app.authPassword, app.language) }}
-                onSignUpWithEmail={() => { void app.signUpWithEmail(app.authEmail, app.authPassword, app.language) }}
-                onBack={() => navigate('/')}
-              />
-            )}
-          />
-          <Route
-            path="/profile"
-            element={(
-              <ProfilePage
-                language={app.language}
-                email={app.session?.user.email}
-                userPlan={app.userPlan}
-                isCloudSyncEnabled={app.isCloudSyncEnabled}
-                onToggleCloudSync={() => app.setIsCloudSyncEnabled((current) => !current)}
-                onSignOut={() => {
-                  void app.signOutFromCloud()
-                  navigate('/auth')
-                }}
-                onBackToChat={() => navigate('/chat')}
-              />
-            )}
-          />
-          <Route
-            path="/chat"
-            element={(
-              <ChatPage
-                workspaceValue={{
-                  language: app.language,
-                  t: app.t,
-                  isDesktopSidebarPinned: app.isDesktopSidebarPinned,
-                  isDesktopSidebarOpen: app.isDesktopSidebarOpen,
-                  setIsDesktopSidebarPinned: app.setIsDesktopSidebarPinned,
-                  setIsDesktopSidebarHovered: app.setIsDesktopSidebarHovered,
-                  isMobileConversationMenuOpen: app.isMobileConversationMenuOpen,
-                  setIsMobileConversationMenuOpen: app.setIsMobileConversationMenuOpen,
-                  openNewConversationModal: app.openNewConversationModal,
-                  isLoading: app.isLoading,
-                  conversationList: conversationSummaries,
-                  activeConversationId: app.activeConversationId,
-                  setActiveConversationId: app.setActiveConversationId,
-                  responseModeOptions,
-                  responseMode: app.responseMode,
-                  setResponseMode: app.setResponseMode,
-                  responseModeLabel,
-                  setScreen,
-                  sessionEmail: app.session?.user.email,
-                  showStickyPassagePanel: app.showStickyPassagePanel,
-                  examPassage: app.activeConversation?.examPassage,
-                  visibleMessages: app.visibleMessages,
-                  selectQuizOption: app.selectQuizOption,
-                  selectTrueFalseOption: app.selectTrueFalseOption,
-                  retryAssistantMessage: app.retryAssistantMessage,
-                  nowMs: app.nowMs,
-                  markdownComponents,
-                  markdownInlineComponents,
-                  activeConversation: app.activeConversation,
-                  generateExamQuestion: app.generateExamQuestion,
-                  hasPendingExamMessage: app.hasPendingExamMessage,
-                  draft: app.draft,
-                  setDraft: app.setDraft,
-                  resizeDraftTextarea: app.resizeDraftTextarea,
-                  draftTextareaRef: app.draftTextareaRef,
-                  handleSubmit: app.handleSubmit,
-                  userPlan: app.userPlan,
-                  isCloudSyncEnabled: app.isCloudSyncEnabled,
-                  setIsCloudSyncEnabled: app.setIsCloudSyncEnabled,
-                  cloudSyncTimeText: app.cloudSyncTimeText,
-                  signOutFromCloud: app.signOutFromCloud,
-                  authEmail: app.authEmail,
-                  setAuthEmail: app.setAuthEmail,
-                  authPassword: app.authPassword,
-                  setAuthPassword: app.setAuthPassword,
-                  authError: app.authError,
-                  isAuthBusy: app.isAuthBusy,
-                  signInWithGoogle: app.signInWithGoogle,
-                  signInWithEmail: app.signInWithEmail,
-                  signUpWithEmail: app.signUpWithEmail,
-                }}
-              />
-            )}
-          />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/chat" element={<ChatPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
 
-      <NewConversationModal
-        language={app.language}
-        isOpen={app.isNewConversationModalOpen}
-        mode={app.newConversationMode}
-        topic={app.newConversationTopic}
-        examProfile={app.newConversationExamProfile}
-        examFlow={app.newConversationExamFlow}
-        difficulty={app.newConversationDifficulty}
-        conversationModeLabel={conversationModeLabel}
-        examProfileLabel={examProfileLabel}
-        examFlowLabel={examFlowLabel}
-        difficultyLabel={difficultyLabel}
-        onModeChange={app.setNewConversationMode}
-        onTopicChange={app.setNewConversationTopic}
-        onExamProfileChange={app.setNewConversationExamProfile}
-        onExamFlowChange={app.setNewConversationExamFlow}
-        onDifficultyChange={app.setNewConversationDifficulty}
-        onCancel={app.closeNewConversationModal}
-        onCreate={() => {
-          void app.startNewConversation().then((result) => {
-            if (result === 'auth_required') {
-              navigate('/auth')
-              return
-            }
+      <AppNewConversationModal />
+      </div>
+    </AppProvider>
+  )
+}
 
-            navigate('/chat')
-          })
-        }}
-      />
-    </div>
+function App() {
+  return (
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
   )
 }
 
