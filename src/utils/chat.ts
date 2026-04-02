@@ -8,12 +8,21 @@ import type {
   QuizActivity,
   QuizOption,
   QuizOptionId,
+  OrderingActivity,
+  MatchPairsActivity,
+  ClozeActivity,
   ShortAnswerActivity,
   TrueFalseActivity,
 } from '../types/chat'
 
 export function parseStoredResponseMode(value: unknown): ResponseMode {
-  return value === 'quiz_mcq' || value === 'true_false' || value === 'short_answer' || value === 'auto'
+  return value === 'quiz_mcq'
+    || value === 'true_false'
+    || value === 'short_answer'
+    || value === 'ordering'
+    || value === 'match_pairs'
+    || value === 'cloze'
+    || value === 'auto'
     ? value
     : 'auto'
 }
@@ -76,6 +85,18 @@ export function getQuestionOnlyHistory(conversation: Conversation, limit = 8) {
         return message.shortAnswer.question
       }
 
+      if (message.ordering?.question) {
+        return message.ordering.question
+      }
+
+      if (message.matchPairs?.prompt) {
+        return message.matchPairs.prompt
+      }
+
+      if (message.cloze?.text) {
+        return message.cloze.text
+      }
+
       return ''
     })
     .map((question) => question.replace(/\s+/g, ' ').trim())
@@ -92,7 +113,7 @@ export function parseAssistantReply(rawText: string): AssistantReplyPayload {
   try {
     const parsed = JSON.parse(normalizeJsonText(cleanedText)) as AssistantStructuredResponse
 
-    if (parsed.type === 'quiz_mcq') {
+      if (parsed.type === 'quiz_mcq') {
       const correctOptionId = parseQuizOptionId(parsed.correctOptionId)
       const options = (parsed.options ?? [])
         .map((option) => {
@@ -123,6 +144,91 @@ export function parseAssistantReply(rawText: string): AssistantReplyPayload {
           responseType: 'quiz_mcq',
           text: quiz.question,
           quiz,
+        }
+      }
+    }
+
+    if (parsed.type === 'ordering' && parsed.question?.trim()) {
+      const items = (parsed.items ?? []).map((item) => item.trim()).filter(Boolean)
+      const correctOrder = (parsed.correctOrder ?? []).map((item) => item.trim()).filter(Boolean)
+
+      if (items.length >= 2) {
+        const ordering: OrderingActivity = {
+          id: parsed.id?.trim() || `ordering-${Date.now()}`,
+          topic: parsed.topic?.trim() || '',
+          question: parsed.question.trim(),
+          items,
+          correctOrder,
+          explanation: parsed.explanation?.trim() || '',
+        }
+
+        return {
+          responseType: 'ordering',
+          text: ordering.question,
+          ordering,
+        }
+      }
+    }
+
+    if (parsed.type === 'match_pairs') {
+      const pairs = (parsed.pairs ?? [])
+        .map((pair) => {
+          const left = pair.left?.trim() || ''
+          const right = pair.right?.trim() || ''
+
+          if (!left || !right) {
+            return null
+          }
+
+          return { left, right }
+        })
+        .filter((pair): pair is { left: string; right: string } => pair !== null)
+
+      if (pairs.length >= 2) {
+        const matchPairs: MatchPairsActivity = {
+          id: parsed.id?.trim() || `match-pairs-${Date.now()}`,
+          topic: parsed.topic?.trim() || '',
+          prompt: parsed.prompt?.trim() || parsed.question?.trim() || '',
+          pairs,
+          explanation: parsed.explanation?.trim() || '',
+        }
+
+        return {
+          responseType: 'match_pairs',
+          text: matchPairs.prompt || (matchPairs.topic || 'Match pairs activity'),
+          matchPairs,
+        }
+      }
+    }
+
+    if (parsed.type === 'cloze' && parsed.text?.trim()) {
+      const blanks = (parsed.blanks ?? [])
+        .map((blank, index) => {
+          const answer = blank.answer?.trim() || ''
+          if (!answer) {
+            return null
+          }
+
+          return {
+            id: blank.id?.trim() || `blank-${index + 1}`,
+            answer,
+          }
+        })
+        .filter((blank): blank is { id: string; answer: string } => blank !== null)
+
+      if (blanks.length > 0) {
+        const cloze: ClozeActivity = {
+          id: parsed.id?.trim() || `cloze-${Date.now()}`,
+          topic: parsed.topic?.trim() || '',
+          text: parsed.text.trim(),
+          blanks,
+          explanation: parsed.explanation?.trim() || '',
+        }
+
+        return {
+          responseType: 'cloze',
+          text: cloze.text,
+          cloze,
         }
       }
     }

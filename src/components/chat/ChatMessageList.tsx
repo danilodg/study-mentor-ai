@@ -7,6 +7,9 @@ import type { ResponseMode } from '../../types/chat'
 export function ChatMessageList() {
   const [isResponseMenuOpen, setIsResponseMenuOpen] = useState(false)
   const responseMenuRef = useRef<HTMLDivElement | null>(null)
+  const [orderingDrafts, setOrderingDrafts] = useState<Record<string, string[]>>({})
+  const [matchDrafts, setMatchDrafts] = useState<Record<string, Record<string, string>>>({})
+  const [clozeDrafts, setClozeDrafts] = useState<Record<string, Record<string, string>>>({})
   const {
     language,
     showStickyPassagePanel,
@@ -14,6 +17,9 @@ export function ChatMessageList() {
     visibleMessages,
     selectQuizOption,
     selectTrueFalseOption,
+    submitOrderingAnswer,
+    submitMatchPairsAnswer,
+    submitClozeAnswer,
     retryAssistantMessage,
     nowMs,
     markdownComponents,
@@ -63,6 +69,42 @@ export function ChatMessageList() {
     }
 
     return <Settings2 size={16} />
+  }
+
+  function updateOrderingSelection(messageId: string, currentOrder: string[], position: number, nextItem: string) {
+    const next = [...currentOrder]
+    const previousIndex = next.findIndex((item) => item === nextItem)
+
+    if (previousIndex >= 0) {
+      const currentAtPosition = next[position]
+      next[previousIndex] = currentAtPosition
+    }
+
+    next[position] = nextItem
+    setOrderingDrafts((drafts) => ({ ...drafts, [messageId]: next }))
+  }
+
+  function parseClozeTokens(text: string) {
+    const tokenPattern = /(\{\{([^}]+)\}\}|__([^_]+)__|\[\[([^\]]+)\]\])/g
+    const tokens: Array<{ type: 'text' | 'blank'; value: string }> = []
+    let lastIndex = 0
+    let match: RegExpExecArray | null
+
+    while ((match = tokenPattern.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        tokens.push({ type: 'text', value: text.slice(lastIndex, match.index) })
+      }
+
+      const blankId = (match[2] ?? match[3] ?? match[4] ?? '').trim()
+      tokens.push({ type: 'blank', value: blankId })
+      lastIndex = match.index + match[0].length
+    }
+
+    if (lastIndex < text.length) {
+      tokens.push({ type: 'text', value: text.slice(lastIndex) })
+    }
+
+    return tokens
   }
 
   return (
@@ -227,6 +269,261 @@ export function ChatMessageList() {
                           >
                             {language === 'pt' ? 'Proxima questao' : 'Next question'}
                           </button>
+                        ) : null}
+                      </div>
+                    ) : message.ordering ? (
+                      <div className="mt-2 rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
+                        {message.ordering.topic ? (
+                          <p className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
+                            {message.ordering.topic}
+                          </p>
+                        ) : null}
+                        <div className="mt-1 text-sm font-medium leading-6 text-[color:var(--text-main)]">
+                          <ReactMarkdown components={markdownComponents}>{message.ordering.question}</ReactMarkdown>
+                        </div>
+                        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-[color:var(--text-soft)]">
+                          {(orderingDrafts[message.id] ?? message.ordering.items).map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ol>
+                        {!message.orderingSubmitted ? (
+                          <div className="mt-2 grid gap-2">
+                            {(orderingDrafts[message.id] ?? message.ordering.items).map((selectedItem, index, currentItems) => (
+                              <div key={`${selectedItem}-${index}`} className="grid grid-cols-[36px_minmax(0,1fr)] items-center gap-2">
+                                <span className="text-xs font-semibold text-[color:var(--text-muted)]">{index + 1}</span>
+                                <select
+                                  value={selectedItem}
+                                  onChange={(event) => {
+                                    updateOrderingSelection(message.id, currentItems, index, event.target.value)
+                                  }}
+                                  className="rounded-[10px] border border-[color:var(--card-border)] bg-transparent px-2 py-2 text-sm text-[color:var(--text-main)]"
+                                >
+                                  {(message.ordering?.items ?? []).map((option) => {
+                                    const alreadyUsed = currentItems.includes(option) && option !== selectedItem
+                                    return (
+                                      <option key={`${message.id}-${index}-${option}`} value={option} disabled={alreadyUsed}>
+                                        {option}
+                                      </option>
+                                    )
+                                  })}
+                                </select>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => submitOrderingAnswer(message.id, orderingDrafts[message.id] ?? message.ordering?.items ?? [])}
+                              className="rounded-[10px] border border-[color:var(--card-border)] px-3 py-2 text-xs text-[color:var(--text-main)]"
+                            >
+                              {language === 'pt' ? 'Responder ordenacao' : 'Submit ordering'}
+                            </button>
+                          </div>
+                        ) : null}
+                        {message.orderingSubmitted && message.ordering.explanation ? (
+                          <div className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
+                            <ReactMarkdown components={markdownInlineComponents}>{message.ordering.explanation}</ReactMarkdown>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : message.matchPairs ? (
+                      <div className="mt-2 rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
+                        {message.matchPairs.topic ? (
+                          <p className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
+                            {message.matchPairs.topic}
+                          </p>
+                        ) : null}
+                        {message.matchPairs.prompt ? (
+                          <div className="mt-1 text-sm font-medium leading-6 text-[color:var(--text-main)]">
+                            <ReactMarkdown components={markdownComponents}>{message.matchPairs.prompt}</ReactMarkdown>
+                          </div>
+                        ) : null}
+                        <div className="mt-2 grid gap-2">
+                          {(message.matchPairs?.pairs ?? []).map((pair) => {
+                            const currentValue = matchDrafts[message.id]?.[pair.left] ?? ''
+                            return (
+                              <div key={`${pair.left}-${pair.right}`} className="grid grid-cols-[minmax(0,1fr)_64px_minmax(0,1fr)] items-center gap-2 rounded-[10px] border border-[color:var(--card-border)] px-2 py-2 text-sm text-[color:var(--text-soft)]">
+                                <span className="truncate font-medium text-[color:var(--text-main)]">{pair.left}</span>
+                                <span className="h-px bg-[color:var(--card-border)]" />
+                                {!message.matchPairsSubmitted ? (
+                                  <select
+                                    value={currentValue}
+                                    onChange={(event) => {
+                                      const nextValue = event.target.value
+                                      setMatchDrafts((drafts) => ({
+                                        ...drafts,
+                                        [message.id]: {
+                                          ...(drafts[message.id] ?? {}),
+                                          [pair.left]: nextValue,
+                                        },
+                                      }))
+                                    }}
+                                    className="rounded-[10px] border border-[color:var(--card-border)] bg-transparent px-2 py-1 text-sm text-[color:var(--text-main)]"
+                                  >
+                                    <option value="">{language === 'pt' ? 'Selecione' : 'Select'}</option>
+                                    {(message.matchPairs?.pairs ?? []).map((candidate) => {
+                                      const usedByOther = Object.entries(matchDrafts[message.id] ?? {})
+                                        .some(([leftKey, value]) => leftKey !== pair.left && value === candidate.right)
+
+                                      return (
+                                        <option
+                                          key={`${pair.left}-${candidate.right}`}
+                                          value={candidate.right}
+                                          disabled={usedByOther && candidate.right !== currentValue}
+                                        >
+                                          {candidate.right}
+                                        </option>
+                                      )
+                                    })}
+                                  </select>
+                                ) : (
+                                  <span className="truncate">{message.matchPairsAnswer?.[pair.left] ?? '-'}</span>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {!message.matchPairsSubmitted ? (
+                          <button
+                            type="button"
+                            onClick={() => submitMatchPairsAnswer(message.id, matchDrafts[message.id] ?? {})}
+                            className="mt-2 rounded-[10px] border border-[color:var(--card-border)] px-3 py-2 text-xs text-[color:var(--text-main)]"
+                          >
+                            {language === 'pt' ? 'Responder associacao' : 'Submit matching'}
+                          </button>
+                        ) : null}
+                        {message.matchPairsSubmitted && message.matchPairs.explanation ? (
+                          <div className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
+                            <ReactMarkdown components={markdownInlineComponents}>{message.matchPairs.explanation}</ReactMarkdown>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : message.cloze ? (
+                      <div className="mt-2 rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
+                        {message.cloze.topic ? (
+                          <p className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
+                            {message.cloze.topic}
+                          </p>
+                        ) : null}
+                        <div className="mt-1 text-sm leading-7 text-[color:var(--text-main)]">
+                          {(() => {
+                            const tokens = parseClozeTokens(message.cloze?.text ?? '')
+                            const hasTokenizedBlanks = tokens.some((token) => token.type === 'blank')
+                            const optionValues = (message.cloze?.blanks ?? []).map((blank) => blank.answer)
+
+                            if (!hasTokenizedBlanks) {
+                              return <ReactMarkdown components={markdownComponents}>{message.cloze?.text ?? ''}</ReactMarkdown>
+                            }
+
+                            return tokens.map((token, tokenIndex) => {
+                              if (token.type === 'text') {
+                                return <span key={`text-${tokenIndex}`}>{token.value}</span>
+                              }
+
+                              const blankId = token.value
+                              const currentValue = clozeDrafts[message.id]?.[blankId] ?? ''
+
+                              if (message.clozeSubmitted) {
+                                return (
+                                  <span key={`blank-${tokenIndex}`} className="mx-1 inline-flex rounded-[10px] border border-[color:var(--card-border)] px-2 py-0.5 text-xs text-[color:var(--text-main)]">
+                                    {message.clozeAnswer?.[blankId] ?? '—'}
+                                  </span>
+                                )
+                              }
+
+                              return (
+                                <select
+                                  key={`blank-${tokenIndex}`}
+                                  value={currentValue}
+                                  onChange={(event) => {
+                                    const nextValue = event.target.value
+                                    setClozeDrafts((drafts) => ({
+                                      ...drafts,
+                                      [message.id]: {
+                                        ...(drafts[message.id] ?? {}),
+                                        [blankId]: nextValue,
+                                      },
+                                    }))
+                                  }}
+                                  className="mx-1 inline-flex rounded-[10px] border border-[color:var(--card-border)] bg-transparent px-2 py-1 text-xs text-[color:var(--text-main)]"
+                                >
+                                  <option value="">{language === 'pt' ? 'Selecione' : 'Select'}</option>
+                                  {optionValues.map((option) => {
+                                    const usedByOther = Object.entries(clozeDrafts[message.id] ?? {})
+                                      .some(([id, value]) => id !== blankId && value === option)
+
+                                    return (
+                                      <option
+                                        key={`${blankId}-${option}`}
+                                        value={option}
+                                        disabled={usedByOther && option !== currentValue}
+                                      >
+                                        {option}
+                                      </option>
+                                    )
+                                  })}
+                                </select>
+                              )
+                            })
+                          })()}
+                        </div>
+
+                        {!parseClozeTokens(message.cloze?.text ?? '').some((token) => token.type === 'blank') ? (
+                          <div className="mt-2 grid gap-2">
+                            {(message.cloze?.blanks ?? []).map((blank) => (
+                              <div key={blank.id} className="rounded-[10px] border border-[color:var(--card-border)] px-2 py-2 text-sm text-[color:var(--text-soft)]">
+                                <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.12em] text-[color:var(--accent-soft)]">{blank.id}</span>
+                                <span className="mx-2 text-[color:var(--text-muted)]">=</span>
+                                {!message.clozeSubmitted ? (
+                                  <select
+                                    value={clozeDrafts[message.id]?.[blank.id] ?? ''}
+                                    onChange={(event) => {
+                                      const nextValue = event.target.value
+                                      setClozeDrafts((drafts) => ({
+                                        ...drafts,
+                                        [message.id]: {
+                                          ...(drafts[message.id] ?? {}),
+                                          [blank.id]: nextValue,
+                                        },
+                                      }))
+                                    }}
+                                    className="rounded-[10px] border border-[color:var(--card-border)] bg-transparent px-2 py-1 text-sm text-[color:var(--text-main)]"
+                                  >
+                                    <option value="">{language === 'pt' ? 'Selecione' : 'Select'}</option>
+                                    {(message.cloze?.blanks ?? []).map((candidate) => {
+                                      const currentValue = clozeDrafts[message.id]?.[blank.id] ?? ''
+                                      const usedByOther = Object.entries(clozeDrafts[message.id] ?? {})
+                                        .some(([id, value]) => id !== blank.id && value === candidate.answer)
+
+                                      return (
+                                        <option
+                                          key={`${blank.id}-${candidate.answer}`}
+                                          value={candidate.answer}
+                                          disabled={usedByOther && candidate.answer !== currentValue}
+                                        >
+                                          {candidate.answer}
+                                        </option>
+                                      )
+                                    })}
+                                  </select>
+                                ) : (
+                                  <span>{message.clozeAnswer?.[blank.id] ?? '-'}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {!message.clozeSubmitted ? (
+                          <button
+                            type="button"
+                            onClick={() => submitClozeAnswer(message.id, clozeDrafts[message.id] ?? {})}
+                            className="mt-2 rounded-[10px] border border-[color:var(--card-border)] px-3 py-2 text-xs text-[color:var(--text-main)]"
+                          >
+                            {language === 'pt' ? 'Responder lacunas' : 'Submit cloze'}
+                          </button>
+                        ) : null}
+                        {message.clozeSubmitted && message.cloze.explanation ? (
+                          <div className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
+                            <ReactMarkdown components={markdownInlineComponents}>{message.cloze.explanation}</ReactMarkdown>
+                          </div>
                         ) : null}
                       </div>
                     ) : (

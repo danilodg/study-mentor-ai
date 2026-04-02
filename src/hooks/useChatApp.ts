@@ -367,6 +367,9 @@ export function useChatApp() {
               quiz: assistantReply.quiz,
               trueFalse: assistantReply.trueFalse,
               shortAnswer: assistantReply.shortAnswer,
+              ordering: assistantReply.ordering,
+              matchPairs: assistantReply.matchPairs,
+              cloze: assistantReply.cloze,
             },
           ],
           updatedAt: Date.now(),
@@ -459,6 +462,9 @@ export function useChatApp() {
               quiz: assistantReply.quiz,
               trueFalse: assistantReply.trueFalse,
               shortAnswer: assistantReply.shortAnswer,
+              ordering: assistantReply.ordering,
+              matchPairs: assistantReply.matchPairs,
+              cloze: assistantReply.cloze,
             }
           }),
           updatedAt: Date.now(),
@@ -640,6 +646,9 @@ export function useChatApp() {
           quiz: questionPayload.quiz,
           trueFalse: questionPayload.trueFalse,
           shortAnswer: questionPayload.shortAnswer,
+          ordering: questionPayload.ordering,
+          matchPairs: questionPayload.matchPairs,
+          cloze: questionPayload.cloze,
         }
 
         const nextMessages = replaceMessageId
@@ -834,6 +843,90 @@ export function useChatApp() {
     }
   }
 
+  function submitOrderingAnswer(messageId: string, answer: string[]) {
+    if (!activeConversation || isLoading) {
+      return
+    }
+
+    setConversations((current) => current.map((conversation) => {
+      if (conversation.id !== activeConversationId) {
+        return conversation
+      }
+
+      return {
+        ...conversation,
+        messages: conversation.messages.map((message) => {
+          if (message.id !== messageId || !message.ordering || message.orderingSubmitted) {
+            return message
+          }
+
+          return {
+            ...message,
+            orderingAnswer: answer,
+            orderingSubmitted: true,
+          }
+        }),
+        updatedAt: Date.now(),
+      }
+    }))
+  }
+
+  function submitMatchPairsAnswer(messageId: string, answer: Record<string, string>) {
+    if (!activeConversation || isLoading) {
+      return
+    }
+
+    setConversations((current) => current.map((conversation) => {
+      if (conversation.id !== activeConversationId) {
+        return conversation
+      }
+
+      return {
+        ...conversation,
+        messages: conversation.messages.map((message) => {
+          if (message.id !== messageId || !message.matchPairs || message.matchPairsSubmitted) {
+            return message
+          }
+
+          return {
+            ...message,
+            matchPairsAnswer: answer,
+            matchPairsSubmitted: true,
+          }
+        }),
+        updatedAt: Date.now(),
+      }
+    }))
+  }
+
+  function submitClozeAnswer(messageId: string, answer: Record<string, string>) {
+    if (!activeConversation || isLoading) {
+      return
+    }
+
+    setConversations((current) => current.map((conversation) => {
+      if (conversation.id !== activeConversationId) {
+        return conversation
+      }
+
+      return {
+        ...conversation,
+        messages: conversation.messages.map((message) => {
+          if (message.id !== messageId || !message.cloze || message.clozeSubmitted) {
+            return message
+          }
+
+          return {
+            ...message,
+            clozeAnswer: answer,
+            clozeSubmitted: true,
+          }
+        }),
+        updatedAt: Date.now(),
+      }
+    }))
+  }
+
   function deleteConversation(conversationId: string) {
     setConversations((current) => {
       const remaining = current.filter((conversation) => conversation.id !== conversationId)
@@ -956,6 +1049,9 @@ export function useChatApp() {
     startNewConversation,
     selectQuizOption,
     selectTrueFalseOption,
+    submitOrderingAnswer,
+    submitMatchPairsAnswer,
+    submitClozeAnswer,
     handleSubmit,
     isSupabaseConfigured,
   }

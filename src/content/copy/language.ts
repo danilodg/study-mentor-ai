@@ -21,11 +21,14 @@ export const systemInstructionByLanguage: Record<Language, string> = {
     'Nao se apresente, nao diga seu nome e nao comece com saudacoes padrao, a menos que o usuario peca isso.',
     'Nao use separadores com --- nem titulos decorados.',
     'Responda sempre em JSON valido.',
-    'Tipos aceitos: text, quiz_mcq, true_false e short_answer.',
+    'Tipos aceitos: text, quiz_mcq, true_false, short_answer, ordering, match_pairs e cloze.',
     'Para text, use: {"type":"text","text":"..."}.',
     'Para quiz_mcq, use: {"type":"quiz_mcq","id":"...","topic":"...","question":"...","options":[{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}],"correctOptionId":"A|B|C|D","explanation":"..."}.',
     'Para true_false, use: {"type":"true_false","id":"...","topic":"...","statement":"...","correctAnswer":true|false,"explanation":"..."}.',
     'Para short_answer, use: {"type":"short_answer","id":"...","topic":"...","question":"...","sampleAnswer":"...","evaluationCriteria":["...","...","..."]}.',
+    'Para ordering, use: {"type":"ordering","id":"...","topic":"...","question":"...","items":["...","...","..."],"correctOrder":["...","...","..."],"explanation":"..."}.',
+    'Para match_pairs, use: {"type":"match_pairs","id":"...","topic":"...","prompt":"...","pairs":[{"left":"...","right":"..."},{"left":"...","right":"..."}],"explanation":"..."}.',
+    'Para cloze, use: {"type":"cloze","id":"...","topic":"...","text":"...","blanks":[{"id":"1","answer":"..."},{"id":"2","answer":"..."}],"explanation":"..."}.',
     'Quando o usuario pedir atividade, questao ou multipla escolha, retorne quiz_mcq.',
     'Voce pode usar markdown simples nos campos de texto desses tipos para melhorar leitura.',
   ].join(' '),
@@ -41,17 +44,20 @@ export const systemInstructionByLanguage: Record<Language, string> = {
     'Do not introduce yourself, mention your name, or start with default greetings unless the user asks for it.',
     'Do not use --- separators or decorative headings.',
     'Always return valid JSON.',
-    'Allowed types: text, quiz_mcq, true_false, and short_answer.',
+    'Allowed types: text, quiz_mcq, true_false, short_answer, ordering, match_pairs, and cloze.',
     'For text, use: {"type":"text","text":"..."}.',
     'For quiz_mcq, use: {"type":"quiz_mcq","id":"...","topic":"...","question":"...","options":[{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}],"correctOptionId":"A|B|C|D","explanation":"..."}.',
     'For true_false, use: {"type":"true_false","id":"...","topic":"...","statement":"...","correctAnswer":true|false,"explanation":"..."}.',
     'For short_answer, use: {"type":"short_answer","id":"...","topic":"...","question":"...","sampleAnswer":"...","evaluationCriteria":["...","...","..."]}.',
+    'For ordering, use: {"type":"ordering","id":"...","topic":"...","question":"...","items":["...","...","..."],"correctOrder":["...","...","..."],"explanation":"..."}.',
+    'For match_pairs, use: {"type":"match_pairs","id":"...","topic":"...","prompt":"...","pairs":[{"left":"...","right":"..."},{"left":"...","right":"..."}],"explanation":"..."}.',
+    'For cloze, use: {"type":"cloze","id":"...","topic":"...","text":"...","blanks":[{"id":"1","answer":"..."},{"id":"2","answer":"..."}],"explanation":"..."}.',
     'When the user asks for an activity, question, or multiple-choice exercise, return quiz_mcq.',
     'You may use simple markdown in text fields to improve readability.',
   ].join(' '),
 }
 
-export const responseModeOptions: ResponseMode[] = ['auto', 'quiz_mcq', 'true_false', 'short_answer']
+export const responseModeOptions: ResponseMode[] = ['auto', 'quiz_mcq', 'true_false', 'short_answer', 'ordering', 'match_pairs', 'cloze']
 
 export const responseModeLabel: Record<Language, Record<ResponseMode, string>> = {
   pt: {
@@ -59,12 +65,18 @@ export const responseModeLabel: Record<Language, Record<ResponseMode, string>> =
     quiz_mcq: 'Multipla escolha',
     true_false: 'Verdadeiro/Falso',
     short_answer: 'Resposta curta',
+    ordering: 'Ordenacao',
+    match_pairs: 'Associacao',
+    cloze: 'Lacunas',
   },
   en: {
     auto: 'Auto',
     quiz_mcq: 'Multiple choice',
     true_false: 'True/False',
     short_answer: 'Short answer',
+    ordering: 'Ordering',
+    match_pairs: 'Match pairs',
+    cloze: 'Cloze',
   },
 }
 
@@ -125,8 +137,8 @@ export function getResponseModeInstruction(language: Language, mode: ForcedRespo
 
   if (mode === 'auto') {
     return language === 'pt'
-      ? 'Modo de resposta: AUTO. Escolha o melhor tipo entre text, quiz_mcq, true_false e short_answer.'
-      : 'Response mode: AUTO. Choose the best type among text, quiz_mcq, true_false, and short_answer.'
+      ? 'Modo de resposta: AUTO. Escolha o melhor tipo entre text, quiz_mcq, true_false, short_answer, ordering, match_pairs e cloze.'
+      : 'Response mode: AUTO. Choose the best type among text, quiz_mcq, true_false, short_answer, ordering, match_pairs, and cloze.'
   }
 
   return language === 'pt'

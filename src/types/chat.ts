@@ -1,7 +1,7 @@
 export type Theme = 'dark' | 'light'
 export type Language = 'pt' | 'en'
 export type Screen = 'landing' | 'auth' | 'profile' | 'chat'
-export type ResponseMode = 'auto' | 'quiz_mcq' | 'true_false' | 'short_answer'
+export type ResponseMode = 'auto' | 'quiz_mcq' | 'true_false' | 'short_answer' | 'ordering' | 'match_pairs' | 'cloze'
 export type ForcedResponseMode = ResponseMode | 'text'
 export type ConversationMode = 'chat' | 'exam'
 export type DifficultyLevel = 'auto' | 'easy' | 'medium' | 'hard'
@@ -40,15 +40,59 @@ export interface ShortAnswerActivity {
   evaluationCriteria: string[]
 }
 
+export interface OrderingActivity {
+  id: string
+  topic: string
+  question: string
+  items: string[]
+  correctOrder: string[]
+  explanation: string
+}
+
+export interface MatchPair {
+  left: string
+  right: string
+}
+
+export interface MatchPairsActivity {
+  id: string
+  topic: string
+  prompt: string
+  pairs: MatchPair[]
+  explanation: string
+}
+
+export interface ClozeBlank {
+  id: string
+  answer: string
+}
+
+export interface ClozeActivity {
+  id: string
+  topic: string
+  text: string
+  blanks: ClozeBlank[]
+  explanation: string
+}
+
 export interface Message {
   id: string
   role: 'assistant' | 'user'
   text: string
   isExamPassage?: boolean
-  responseType?: 'text' | 'quiz_mcq' | 'true_false' | 'short_answer'
+  responseType?: 'text' | 'quiz_mcq' | 'true_false' | 'short_answer' | 'ordering' | 'match_pairs' | 'cloze'
   quiz?: QuizActivity
   trueFalse?: TrueFalseActivity
   shortAnswer?: ShortAnswerActivity
+  ordering?: OrderingActivity
+  matchPairs?: MatchPairsActivity
+  cloze?: ClozeActivity
+  orderingAnswer?: string[]
+  orderingSubmitted?: boolean
+  matchPairsAnswer?: Record<string, string>
+  matchPairsSubmitted?: boolean
+  clozeAnswer?: Record<string, string>
+  clozeSubmitted?: boolean
   selectedOptionId?: QuizOptionId
   selectedTrueFalse?: boolean
   retryAction?: 'chat' | 'exam'
@@ -58,7 +102,7 @@ export interface Message {
 }
 
 export interface AssistantStructuredResponse {
-  type: 'text' | 'quiz_mcq' | 'true_false' | 'short_answer'
+  type: 'text' | 'quiz_mcq' | 'true_false' | 'short_answer' | 'ordering' | 'match_pairs' | 'cloze'
   text?: string
   id?: string
   topic?: string
@@ -70,14 +114,22 @@ export interface AssistantStructuredResponse {
   sampleAnswer?: string
   evaluationCriteria?: string[]
   explanation?: string
+  items?: string[]
+  correctOrder?: string[]
+  prompt?: string
+  pairs?: Array<{ left?: string; right?: string }>
+  blanks?: Array<{ id?: string; answer?: string }>
 }
 
 export interface AssistantReplyPayload {
-  responseType: 'text' | 'quiz_mcq' | 'true_false' | 'short_answer'
+  responseType: 'text' | 'quiz_mcq' | 'true_false' | 'short_answer' | 'ordering' | 'match_pairs' | 'cloze'
   text: string
   quiz?: QuizActivity
   trueFalse?: TrueFalseActivity
   shortAnswer?: ShortAnswerActivity
+  ordering?: OrderingActivity
+  matchPairs?: MatchPairsActivity
+  cloze?: ClozeActivity
 }
 
 export interface Conversation {

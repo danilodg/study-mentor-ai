@@ -32,6 +32,9 @@ export interface ChatWorkspaceContextValue {
   visibleMessages: Message[]
   selectQuizOption: (messageId: string, optionId: QuizOptionId) => void
   selectTrueFalseOption: (messageId: string, selectedValue: boolean) => void
+  submitOrderingAnswer: (messageId: string, answer: string[]) => void
+  submitMatchPairsAnswer: (messageId: string, answer: Record<string, string>) => void
+  submitClozeAnswer: (messageId: string, answer: Record<string, string>) => void
   retryAssistantMessage: (message: Message) => Promise<void>
   nowMs: number
   markdownComponents: Components
