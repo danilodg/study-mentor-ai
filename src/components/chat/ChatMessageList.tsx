@@ -1,8 +1,12 @@
+import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { ArrowUp } from 'lucide-react'
+import { ArrowUp, CheckSquare2, FileText, Settings2, ToggleLeft } from 'lucide-react'
 import { useChatWorkspaceContext } from '../../context/ChatWorkspaceContext'
+import type { ResponseMode } from '../../types/chat'
 
 export function ChatMessageList() {
+  const [isResponseMenuOpen, setIsResponseMenuOpen] = useState(false)
+  const responseMenuRef = useRef<HTMLDivElement | null>(null)
   const {
     language,
     showStickyPassagePanel,
@@ -23,7 +27,43 @@ export function ChatMessageList() {
     resizeDraftTextarea,
     draftTextareaRef,
     handleSubmit,
+    responseMode,
+    setResponseMode,
+    responseModeOptions,
+    responseModeLabel,
   } = useChatWorkspaceContext()
+
+  useEffect(() => {
+    if (!isResponseMenuOpen) {
+      return
+    }
+
+    function handleOutsideClick(event: MouseEvent) {
+      const target = event.target as Node
+      if (!responseMenuRef.current?.contains(target)) {
+        setIsResponseMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('mousedown', handleOutsideClick)
+    return () => {
+      window.removeEventListener('mousedown', handleOutsideClick)
+    }
+  }, [isResponseMenuOpen])
+
+  function getResponseModeIcon(mode: ResponseMode) {
+    if (mode === 'quiz_mcq') {
+      return <CheckSquare2 size={16} />
+    }
+    if (mode === 'true_false') {
+      return <ToggleLeft size={16} />
+    }
+    if (mode === 'short_answer') {
+      return <FileText size={16} />
+    }
+
+    return <Settings2 size={16} />
+  }
 
   return (
     <div className="mt-2 min-h-0 flex-1 overflow-hidden sm:mt-3 lg:mt-4">
@@ -245,6 +285,47 @@ export function ChatMessageList() {
           ].join(' ')}>
             <div className="glass-card w-full max-w-[700px] rounded-[10px] p-2 sm:p-2">
               <div className="flex items-end gap-2">
+                <div ref={responseMenuRef} className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsResponseMenuOpen((current) => !current)}
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-[10px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] text-[color:var(--text-main)] transition hover:bg-[color:var(--mobile-drawer-card-bg)]"
+                    aria-label={language === 'pt' ? 'Tipo de resposta' : 'Response type'}
+                    title={responseModeLabel[language][responseMode]}
+                  >
+                    {getResponseModeIcon(responseMode)}
+                  </button>
+
+                  {isResponseMenuOpen ? (
+                    <div className="absolute bottom-full left-0 z-30 mb-2 w-[220px] rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--mobile-drawer-bg)] p-2 shadow-[0_14px_34px_rgba(6,10,22,0.28)]">
+                      <p className="mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
+                        {language === 'pt' ? 'Tipo de resposta' : 'Response type'}
+                      </p>
+                      <div className="grid gap-2">
+                        {responseModeOptions.map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => {
+                              setResponseMode(mode)
+                              setIsResponseMenuOpen(false)
+                            }}
+                            className={[
+                              'inline-flex items-center gap-2 rounded-[10px] border px-2 py-2 text-left text-sm',
+                              responseMode === mode
+                                ? 'border-[color:var(--accent-line)] bg-[color:var(--input-bg)] text-[color:var(--text-main)]'
+                                : 'border-[color:var(--card-border)] text-[color:var(--text-soft)]',
+                            ].join(' ')}
+                          >
+                            {getResponseModeIcon(mode)}
+                            <span>{responseModeLabel[language][mode]}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
                 <textarea
                   ref={draftTextareaRef}
                   value={draft}

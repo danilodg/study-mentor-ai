@@ -18,10 +18,6 @@ export function MobileDrawer() {
     setActiveConversationId,
     deleteConversation,
     openNewConversationModal,
-    responseModeOptions,
-    responseMode,
-    setResponseMode,
-    responseModeLabel,
   } = useChatWorkspaceContext()
 
   if (!isMobileConversationMenuOpen) {
@@ -110,27 +106,6 @@ export function MobileDrawer() {
                   </button>
                 </div>
               </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="mt-2 rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--mobile-drawer-card-bg)] p-2">
-          <span className="section-label">{language === 'pt' ? 'Tipo de resposta' : 'Response type'}</span>
-          <div className="mt-2 grid gap-2">
-            {responseModeOptions.map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setResponseMode(mode)}
-                className={[
-                  'rounded-[10px] border px-2 py-2 text-left text-sm',
-                  responseMode === mode
-                    ? 'border-[color:var(--accent-line)]/55 bg-[color:var(--input-bg)] text-[color:var(--text-main)]'
-                    : 'border-[color:var(--card-border)] bg-transparent text-[color:var(--text-soft)]',
-                ].join(' ')}
-              >
-                {responseModeLabel[language][mode]}
-              </button>
             ))}
           </div>
         </section>

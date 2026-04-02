@@ -15,7 +15,7 @@ export function ChatWorkspace() {
           ? 'lg:grid-cols-[320px_minmax(0,1fr)]'
           : 'lg:grid-cols-[60px_minmax(0,1fr)]',
       ].join(' ')}>
-        <section className="lg:glass-panel lg:order-2 flex min-h-0 flex-col px-0 pb-0 pt-0 sm:px-0 sm:pb-0 sm:pt-0 lg:rounded-[10px] lg:px-3 lg:pb-3 lg:pt-3">
+        <section className="lg:glass-panel lg:order-2 flex min-h-0 flex-col px-0 pb-0 pt-0 sm:px-0 sm:pb-0 sm:pt-0 lg:rounded-[10px] lg:px-0 lg:pb-0 lg:pt-0">
           <ChatHeader />
 
           <ChatMessageList />

@@ -12,6 +12,7 @@ export function ProfilePage() {
   return (
     <ProfileScreen
       language={app.language}
+      theme={app.theme}
       displayName={getSessionDisplayName(app.session)}
       email={app.session?.user.email}
       isLoggedIn={isLoggedIn}
@@ -20,6 +21,8 @@ export function ProfilePage() {
       onSelectPlan={(plan) => { void app.setPlanWithCloudSync(plan) }}
       isCloudSyncEnabled={app.isCloudSyncEnabled}
       onToggleCloudSync={() => app.setIsCloudSyncEnabled((current) => !current)}
+      onSwitchLanguage={app.switchLanguage}
+      onToggleTheme={() => app.setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
       onSignOut={() => {
         void app.signOutFromCloud()
         navigate('/auth')

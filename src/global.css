@@ -70,6 +70,10 @@
     --accent-shadow: rgba(72, 133, 255, 0.35);
     --mobile-drawer-bg: #0a1230;
     --mobile-drawer-card-bg: #111b45;
+    --floating-menu-bg: #0f183e;
+    --floating-menu-border: rgba(148, 170, 240, 0.28);
+    --floating-menu-text: #f3f7ff;
+    --floating-menu-muted: #b7c4e7;
   }
 
   .app-theme-light {
@@ -100,6 +104,10 @@
     --accent-shadow: rgba(88, 137, 255, 0.24);
     --mobile-drawer-bg: #f3f7ff;
     --mobile-drawer-card-bg: #e7efff;
+    --floating-menu-bg: #ffffff;
+    --floating-menu-border: rgba(120, 144, 198, 0.34);
+    --floating-menu-text: #1e2c4d;
+    --floating-menu-muted: #5b6d92;
   }
 }
 
