@@ -6,12 +6,14 @@ import {
   getAiUnavailableMessage,
   getExamCompletionText,
   getExamFallbackText,
+  getExamInvalidFormatText,
   getExamProfileInstruction,
   getLocale,
   getMissingApiKeyMessage,
   getPassageExtraInstruction,
   getPassagePrompt,
   getPendingExamText,
+  getPendingNextExamText,
   getQuestionExtraInstruction,
   getQuestionHistoryInstruction,
   getQuestionPrompt,
@@ -127,7 +129,7 @@ export function useChatApp() {
     activeConversation
       && activeConversation.mode === 'exam'
       && activeConversation.examFlow === 'passage'
-      && activeConversation.examPassage.trim(),
+      && activeConversation.examPassageHistory.length > 0,
   )
   const cloudSyncTimeText = lastCloudSyncAt
     ? new Date(lastCloudSyncAt).toLocaleTimeString(getLocale(language), { hour: '2-digit', minute: '2-digit' })
@@ -588,8 +590,42 @@ export function useChatApp() {
 
     const recentQuestionHistory = getQuestionOnlyHistory(targetConversation)
     const historyInstruction = getQuestionHistoryInstruction(language, recentQuestionHistory)
+    const targetMessageId = replaceMessageId ?? `pending-${Date.now()}-${nextQuestionNumber}`
+    const isPassageFlow = targetConversation.examFlow === 'passage'
+    const currentPassageSetIndex = Math.max(targetConversation.examPassageHistory.length - 1, 0)
+    const nextPassageSetIndex = targetConversation.examPassageHistory.length
+    const targetPassageSetIndex = isPassageFlow && nextQuestionNumber === 1 && (forceNewPassage || !targetConversation.examPassage.trim())
+      ? nextPassageSetIndex
+      : currentPassageSetIndex
 
     examGenerationRequestsRef.current.add(requestKey)
+
+    const pendingText = nextQuestionNumber <= 1
+      ? getPendingExamText(language, targetConversation.examFlow)
+      : getPendingNextExamText(language, targetConversation.examFlow)
+
+    setConversations((current) => current.map((conversation) => {
+      if (conversation.id !== conversationId) {
+        return conversation
+      }
+
+      const pendingMessage: Message = {
+        id: targetMessageId,
+        role: 'assistant',
+        responseType: 'text',
+        text: pendingText,
+        examPassageSetIndex: targetPassageSetIndex,
+      }
+      const hasTargetMessage = conversation.messages.some((message) => message.id === targetMessageId)
+
+      return {
+        ...conversation,
+        messages: hasTargetMessage
+          ? conversation.messages.map((message) => (message.id === targetMessageId ? pendingMessage : message))
+          : [...conversation.messages, pendingMessage],
+        updatedAt: Date.now(),
+      }
+    }))
 
     try {
       setIsLoading(true)
@@ -633,13 +669,52 @@ export function useChatApp() {
         },
       )
 
+      if (questionPayload.responseType === 'text') {
+        const invalidFormatText = getExamInvalidFormatText(language)
+
+        setConversations((current) => current.map((conversation) => {
+          if (conversation.id !== conversationId) {
+            return conversation
+          }
+
+          const invalidFormatMessage: Message = {
+            id: targetMessageId,
+            role: 'assistant',
+            responseType: 'text',
+            text: invalidFormatText,
+            retryAction: 'exam',
+            retryQuestionNumber: nextQuestionNumber,
+            examPassageSetIndex: targetPassageSetIndex,
+          }
+
+          const hasTargetMessage = conversation.messages.some((message) => message.id === targetMessageId)
+
+          return {
+            ...conversation,
+            messages: hasTargetMessage
+              ? conversation.messages.map((message) => (message.id === targetMessageId ? invalidFormatMessage : message))
+              : [...conversation.messages, invalidFormatMessage],
+            updatedAt: Date.now(),
+          }
+        }))
+
+        return
+      }
+
       setConversations((current) => current.map((conversation) => {
         if (conversation.id !== conversationId) {
           return conversation
         }
 
+        const nextPassage = generatedPassageText.trim()
+        const currentPassage = conversation.examPassage.trim()
+        const shouldAppendPassage = Boolean(nextPassage) && nextPassage !== currentPassage
+        const nextPassageHistory = shouldAppendPassage
+          ? [...conversation.examPassageHistory, nextPassage]
+          : conversation.examPassageHistory
+        const finalPassageSetIndex = Math.max(nextPassageHistory.length - 1, targetPassageSetIndex)
         const nextAssistantMessage: Message = {
-          id: replaceMessageId ?? `a-${Date.now()}-${nextQuestionNumber}`,
+          id: targetMessageId,
           role: 'assistant',
           text: questionPayload.text,
           responseType: questionPayload.responseType,
@@ -649,16 +724,18 @@ export function useChatApp() {
           ordering: questionPayload.ordering,
           matchPairs: questionPayload.matchPairs,
           cloze: questionPayload.cloze,
+          examPassageSetIndex: finalPassageSetIndex,
         }
-
-        const nextMessages = replaceMessageId
-          ? conversation.messages.map((message) => (message.id === replaceMessageId ? nextAssistantMessage : message))
+        const hasTargetMessage = conversation.messages.some((message) => message.id === targetMessageId)
+        const nextMessages = hasTargetMessage
+          ? conversation.messages.map((message) => (message.id === targetMessageId ? nextAssistantMessage : message))
           : [...conversation.messages, nextAssistantMessage]
 
         return {
           ...conversation,
           messages: nextMessages,
-          examPassage: generatedPassageText || conversation.examPassage,
+          examPassage: nextPassage || conversation.examPassage,
+          examPassageHistory: nextPassageHistory,
           questionCount: nextQuestionNumber,
           updatedAt: Date.now(),
         }
@@ -683,19 +760,22 @@ export function useChatApp() {
         const fallbackText = getExamFallbackText(language, isQuotaError, waitSeconds)
 
         const fallbackMessage: Message = {
-          id: replaceMessageId ?? `a-${Date.now()}-fallback`,
+          id: targetMessageId,
           role: 'assistant',
           responseType: 'text',
           text: fallbackText,
           retryAction: 'exam',
           retryQuestionNumber: nextQuestionNumber,
           retryAt: retryDelayMs > 0 ? Date.now() + retryDelayMs : undefined,
+          examPassageSetIndex: targetPassageSetIndex,
         }
 
-        if (replaceMessageId) {
+        const hasTargetMessage = conversation.messages.some((message) => message.id === targetMessageId)
+
+        if (hasTargetMessage) {
           return {
             ...conversation,
-            messages: conversation.messages.map((message) => (message.id === replaceMessageId ? fallbackMessage : message)),
+            messages: conversation.messages.map((message) => (message.id === targetMessageId ? fallbackMessage : message)),
             updatedAt: Date.now(),
           }
         }
@@ -751,6 +831,7 @@ export function useChatApp() {
             role: 'assistant',
             responseType: 'text',
             text: getPendingExamText(language, newConversationExamFlow),
+            examPassageSetIndex: 0,
           },
         ],
       }

@@ -28,7 +28,7 @@ export interface ChatWorkspaceContextValue {
   sessionEmail?: string
   sessionDisplayName?: string
   showStickyPassagePanel: boolean
-  examPassage?: string
+  examPassageHistory: string[]
   visibleMessages: Message[]
   selectQuizOption: (messageId: string, optionId: QuizOptionId) => void
   selectTrueFalseOption: (messageId: string, selectedValue: boolean) => void

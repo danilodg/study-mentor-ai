@@ -34,7 +34,7 @@ export function ChatPage() {
       sessionEmail: app.session?.user.email,
       sessionDisplayName: getSessionDisplayName(app.session),
       showStickyPassagePanel: app.showStickyPassagePanel,
-      examPassage: app.activeConversation?.examPassage,
+      examPassageHistory: app.activeConversation?.examPassageHistory ?? [],
       visibleMessages: app.visibleMessages,
       selectQuizOption: app.selectQuizOption,
       selectTrueFalseOption: app.selectTrueFalseOption,

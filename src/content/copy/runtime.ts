@@ -171,6 +171,12 @@ export function getExamFallbackText(language: Language, isQuotaError: boolean, w
     : 'I could not generate the next question right now. Please try again.'
 }
 
+export function getExamInvalidFormatText(language: Language) {
+  return language === 'pt'
+    ? 'A questao veio em formato invalido para o modo prova. Toque em "Tentar novamente" para regenerar esta mesma questao.'
+    : 'The question came in an invalid exam format. Tap "Try again" to regenerate this same question.'
+}
+
 export function getPendingExamText(language: Language, flow: ExamFlow) {
   if (flow === 'passage') {
     return language === 'pt'
@@ -181,4 +187,16 @@ export function getPendingExamText(language: Language, flow: ExamFlow) {
   return language === 'pt'
     ? 'Gerando a primeira questao da prova...'
     : 'Generating the first exam question...'
+}
+
+export function getPendingNextExamText(language: Language, flow: ExamFlow) {
+  if (flow === 'passage') {
+    return language === 'pt'
+      ? 'Gerando proxima questao...'
+      : 'Generating next question...'
+  }
+
+  return language === 'pt'
+    ? 'Gerando questao da prova...'
+    : 'Generating exam question...'
 }

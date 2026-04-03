@@ -1,19 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { ArrowUp, CheckSquare2, FileText, Settings2, ToggleLeft } from 'lucide-react'
+import { ArrowUp, CheckSquare2, EllipsisVertical, FileText, Settings2, ToggleLeft } from 'lucide-react'
 import { useChatWorkspaceContext } from '../../context/ChatWorkspaceContext'
-import type { ResponseMode } from '../../types/chat'
+import type { Message, ResponseMode } from '../../types/chat'
 
 export function ChatMessageList() {
   const [isResponseMenuOpen, setIsResponseMenuOpen] = useState(false)
   const responseMenuRef = useRef<HTMLDivElement | null>(null)
+  const [messageMenuOpenId, setMessageMenuOpenId] = useState<string | null>(null)
+  const messageMenuRef = useRef<HTMLDivElement | null>(null)
+  const scrollRootRef = useRef<HTMLDivElement | null>(null)
+  const firstQuestionRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const [orderingDrafts, setOrderingDrafts] = useState<Record<string, string[]>>({})
   const [matchDrafts, setMatchDrafts] = useState<Record<string, Record<string, string>>>({})
   const [clozeDrafts, setClozeDrafts] = useState<Record<string, Record<string, string>>>({})
+  const [passageStartOffsets, setPassageStartOffsets] = useState<Record<number, number>>({})
   const {
     language,
     showStickyPassagePanel,
-    examPassage,
+    examPassageHistory,
     visibleMessages,
     selectQuizOption,
     selectTrueFalseOption,
@@ -56,6 +61,73 @@ export function ChatMessageList() {
       window.removeEventListener('mousedown', handleOutsideClick)
     }
   }, [isResponseMenuOpen])
+
+  useEffect(() => {
+    if (!messageMenuOpenId) {
+      return
+    }
+
+    function handleOutsideClick(event: MouseEvent) {
+      const target = event.target as Node
+
+      if (!messageMenuRef.current?.contains(target)) {
+        setMessageMenuOpenId(null)
+      }
+    }
+
+    window.addEventListener('mousedown', handleOutsideClick)
+    return () => {
+      window.removeEventListener('mousedown', handleOutsideClick)
+    }
+  }, [messageMenuOpenId])
+
+  useEffect(() => {
+    if (!showStickyPassagePanel) {
+      return
+    }
+
+    const root = scrollRootRef.current
+
+    if (!root) {
+      return
+    }
+
+    const updateOffsets = () => {
+      const rootRect = root.getBoundingClientRect()
+      const nextOffsets: Record<number, number> = {}
+
+      for (let index = 0; index < examPassageHistory.length; index += 1) {
+        const anchor = firstQuestionRefs.current[index]
+
+        if (!anchor) {
+          continue
+        }
+
+        const anchorRect = anchor.getBoundingClientRect()
+        nextOffsets[index] = Math.max(0, (anchorRect.top - rootRect.top) + root.scrollTop)
+      }
+
+      setPassageStartOffsets(nextOffsets)
+    }
+
+    updateOffsets()
+    root.addEventListener('scroll', updateOffsets)
+    window.addEventListener('resize', updateOffsets)
+
+    return () => {
+      root.removeEventListener('scroll', updateOffsets)
+      window.removeEventListener('resize', updateOffsets)
+    }
+  }, [examPassageHistory.length, showStickyPassagePanel, visibleMessages])
+
+
+  async function copyMessageText(text: string) {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      return
+    }
+
+    await navigator.clipboard.writeText(text)
+  }
 
   function getResponseModeIcon(mode: ResponseMode) {
     if (mode === 'quiz_mcq') {
@@ -107,31 +179,249 @@ export function ChatMessageList() {
     return tokens
   }
 
+  function isExamQuestionMessage(message: Message) {
+    return Boolean(
+      message.quiz
+      || message.trueFalse
+      || message.shortAnswer
+      || message.ordering
+      || message.matchPairs
+      || message.cloze,
+    )
+  }
+
+  function isExamQuestionAnswered(message: Message) {
+    if (message.quiz) {
+      return Boolean(message.selectedOptionId)
+    }
+
+    if (message.trueFalse) {
+      return typeof message.selectedTrueFalse === 'boolean'
+    }
+
+    if (message.ordering) {
+      return Boolean(message.orderingSubmitted)
+    }
+
+    if (message.matchPairs) {
+      return Boolean(message.matchPairsSubmitted)
+    }
+
+    if (message.cloze) {
+      return Boolean(message.clozeSubmitted)
+    }
+
+    if (message.shortAnswer) {
+      return true
+    }
+
+    return false
+  }
+
+  function isLikelyInvalidExamPayload(message: Message) {
+    if (message.role !== 'assistant' || message.responseType !== 'text') {
+      return false
+    }
+
+    const normalized = message.text.trim().toLowerCase()
+
+    if (!normalized) {
+      return false
+    }
+
+    return (
+      normalized.startsWith('{')
+      || normalized.startsWith('```json')
+      || (normalized.includes('"type"') && (
+        normalized.includes('quiz_mcq')
+        || normalized.includes('true_false')
+        || normalized.includes('short_answer')
+      ))
+    )
+  }
+
+  function getRetryCandidate(message: Message): Message | null {
+    if (message.role !== 'assistant') {
+      return null
+    }
+
+    if (message.retryAction) {
+      return message
+    }
+
+    if (!activeConversation) {
+      return null
+    }
+
+    const conversationMessages = activeConversation.messages
+    const messageIndex = conversationMessages.findIndex((item) => item.id === message.id)
+
+    if (messageIndex < 0) {
+      return null
+    }
+
+    if (activeConversation.mode === 'exam') {
+      const isStructuredQuestion = isExamQuestionMessage(message)
+      const isInvalidPayload = isLikelyInvalidExamPayload(message)
+
+      if (!isStructuredQuestion && !isInvalidPayload) {
+        return null
+      }
+
+      const retryQuestionNumber = conversationMessages
+        .slice(0, messageIndex + 1)
+        .filter((item) => item.role === 'assistant' && (isExamQuestionMessage(item) || isLikelyInvalidExamPayload(item)))
+        .length
+
+      if (retryQuestionNumber <= 0) {
+        return null
+      }
+
+      return {
+        ...message,
+        retryAction: 'exam' as const,
+        retryQuestionNumber,
+      }
+    }
+
+    const previousUserMessage = conversationMessages
+      .slice(0, messageIndex)
+      .reverse()
+      .find((item) => item.role === 'user' && item.text.trim())
+
+    if (!previousUserMessage) {
+      return null
+    }
+
+    return {
+      ...message,
+      retryAction: 'chat' as const,
+      retrySourceText: previousUserMessage.text,
+    }
+  }
+
+  const questionsPerPassage = activeConversation?.examFlow === 'passage'
+    ? Math.max(activeConversation.examQuestionTarget || 4, 1)
+    : 1
+  const messagePassageSetIndexById: Record<string, number> = {}
+  const passageQuestionCounts = examPassageHistory.map(() => 0)
+  let inferredQuestionCount = 0
+
+  for (const message of visibleMessages) {
+    const isExamQuestion = message.role === 'assistant' && (
+      isExamQuestionMessage(message)
+      || isLikelyInvalidExamPayload(message)
+    )
+
+    if (!isExamQuestion) {
+      continue
+    }
+
+    const inferredSetIndex = Math.floor(inferredQuestionCount / questionsPerPassage)
+    const setIndex = typeof message.examPassageSetIndex === 'number'
+      ? message.examPassageSetIndex
+      : inferredSetIndex
+
+    messagePassageSetIndexById[message.id] = setIndex
+
+    if (passageQuestionCounts[setIndex] !== undefined) {
+      passageQuestionCounts[setIndex] += 1
+    }
+
+    inferredQuestionCount += 1
+  }
+
+  const firstQuestionMessageBySet: Record<number, string> = {}
+
+  for (const message of visibleMessages) {
+    const setIndex = messagePassageSetIndexById[message.id]
+    const isFirstEligible = message.role === 'assistant' && (isExamQuestionMessage(message) || isLikelyInvalidExamPayload(message))
+
+    if (!isFirstEligible || typeof setIndex !== 'number') {
+      continue
+    }
+
+    if (!firstQuestionMessageBySet[setIndex]) {
+      firstQuestionMessageBySet[setIndex] = message.id
+    }
+  }
+
   return (
     <div className="mt-2 min-h-0 flex-1 overflow-hidden sm:mt-3 lg:mt-4">
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[980px] flex-col overflow-hidden lg:flex-row lg:gap-2">
+      <div ref={scrollRootRef} className="app-scroll mx-auto flex h-full min-h-0 w-full max-w-[980px] flex-col overflow-y-auto lg:flex-row lg:gap-2">
         {showStickyPassagePanel ? (
-          <aside className="glass-card hidden w-[350px] shrink-0 overflow-hidden rounded-[10px] border border-[color:var(--card-border)] bg-transparent p-2 lg:flex lg:flex-col">
+          <aside className="glass-card hidden w-[350px] shrink-0 overflow-visible rounded-[10px] border border-[color:var(--card-border)] bg-transparent p-2 lg:block">
             <p className="font-['IBM_Plex_Mono'] text-[0.66rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
-              {language === 'pt' ? 'Texto-base' : 'Base passage'}
+              {language === 'pt' ? 'Textos-base' : 'Base passages'}
             </p>
-            <div className="app-scroll mt-2 flex-1 overflow-y-auto text-sm leading-6 text-[color:var(--text-soft)]">
-              <ReactMarkdown components={markdownComponents}>{examPassage ?? ''}</ReactMarkdown>
+            <div className="mt-2">
+              <div className="grid gap-2">
+                {examPassageHistory.map((passage, index) => {
+                  const questionCount = Math.max(passageQuestionCounts[index] || 0, 1)
+                  const currentTop = passageStartOffsets[index] ?? 0
+                  const nextTop = passageStartOffsets[index + 1]
+                  const measuredHeight = typeof nextTop === 'number' ? nextTop - currentTop : undefined
+                  const fallbackHeight = Math.max(220, (questionCount * 220) + 40)
+                  const blockHeightPx = Math.max(220, measuredHeight ?? fallbackHeight)
+
+                  return (
+                    <section
+                      key={`${passage.slice(0, 24)}-${index}`}
+                      className="relative"
+                      style={{ minHeight: `${blockHeightPx}px` }}
+                    >
+                      <div className="sticky top-2 rounded-[10px] border border-[color:var(--accent-line)] bg-[color:var(--input-bg)] p-2">
+                        <p className="font-['IBM_Plex_Mono'] text-[0.62rem] uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
+                          {language === 'pt'
+                            ? `Bloco ${index + 1} de ${examPassageHistory.length}`
+                            : `Set ${index + 1} of ${examPassageHistory.length}`}
+                        </p>
+                        <div className="mt-1 text-sm leading-6 text-[color:var(--text-soft)]">
+                          <ReactMarkdown components={markdownComponents}>{passage}</ReactMarkdown>
+                        </div>
+                      </div>
+                    </section>
+                  )
+                })}
+              </div>
             </div>
           </aside>
         ) : null}
 
         <div className={[
-          'min-h-0 flex flex-col overflow-hidden',
+          'min-h-0 flex flex-col',
           showStickyPassagePanel ? 'flex-1 lg:min-w-0' : 'flex-1',
         ].join(' ')}>
           <div className={[
-            'app-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto',
+            'flex min-h-0 flex-1 flex-col gap-3',
             showStickyPassagePanel ? 'items-start' : 'items-center',
           ].join(' ')}>
-            {visibleMessages.map((message) => (
+            {visibleMessages.map((message) => {
+              const retryCandidate = getRetryCandidate(message)
+              const showRetryOption = activeConversation?.mode !== 'exam'
+                ? Boolean(retryCandidate)
+                : Boolean(message.retryAction)
+                  || (isExamQuestionMessage(message) && !isExamQuestionAnswered(message))
+                  || isLikelyInvalidExamPayload(message)
+              const isRetryDisabled = !showRetryOption
+                || !retryCandidate
+                || isLoading
+                || (retryCandidate.retryAt ? retryCandidate.retryAt > nowMs : false)
+              const retryLabel = activeConversation?.mode === 'exam'
+                ? (language === 'pt' ? 'Gerar novamente pergunta' : 'Regenerate question')
+                : (language === 'pt' ? 'Gerar novamente resposta' : 'Regenerate answer')
+
+              return (
               <div
                 key={message.id}
+                ref={(element) => {
+                  const setIndex = messagePassageSetIndexById[message.id]
+                  const isFirstMessageOfSet = typeof setIndex === 'number' && firstQuestionMessageBySet[setIndex] === message.id
+
+                  if (isFirstMessageOfSet) {
+                    firstQuestionRefs.current[setIndex] = element
+                  }
+                }}
                 className={[
                   'flex w-full max-w-[700px]',
                   message.role === 'user' ? 'justify-end' : 'justify-start',
@@ -145,9 +435,58 @@ export function ChatMessageList() {
                       : 'w-full',
                   ].join(' ')}
                 >
-                  <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
-                    {message.role === 'assistant' ? 'Mentor AI' : language === 'pt' ? 'Voce' : 'You'}
-                  </span>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
+                      {message.role === 'assistant' ? 'Mentor AI' : language === 'pt' ? 'Voce' : 'You'}
+                    </span>
+                    {message.role === 'assistant' ? (
+                      <div
+                        ref={messageMenuOpenId === message.id ? messageMenuRef : undefined}
+                        className="relative"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMessageMenuOpenId((current) => (current === message.id ? null : message.id))
+                          }}
+                          aria-label={language === 'pt' ? 'Mais acoes da mensagem' : 'More message actions'}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-[color:var(--card-border)] text-[color:var(--text-muted)] transition hover:text-[color:var(--text-main)]"
+                        >
+                          <EllipsisVertical size={14} />
+                        </button>
+
+                        {messageMenuOpenId === message.id ? (
+                          <div className="absolute right-0 top-8 z-30 grid min-w-[170px] gap-1 rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--mobile-drawer-bg)] p-1 shadow-[0_14px_34px_rgba(6,10,22,0.28)]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void copyMessageText(message.text)
+                                setMessageMenuOpenId(null)
+                              }}
+                              className="rounded-[8px] px-2 py-1.5 text-left text-xs text-[color:var(--text-main)] transition hover:bg-[color:var(--input-bg)]"
+                            >
+                              {language === 'pt' ? 'Copiar mensagem' : 'Copy message'}
+                            </button>
+                            {showRetryOption ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (retryCandidate) {
+                                    void retryAssistantMessage(retryCandidate)
+                                  }
+                                  setMessageMenuOpenId(null)
+                                }}
+                                disabled={isRetryDisabled}
+                                className="rounded-[8px] px-2 py-1.5 text-left text-xs text-[color:var(--text-main)] transition hover:bg-[color:var(--input-bg)] disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {retryLabel}
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                   {message.role === 'assistant' ? (
                     message.quiz ? (
                       <div className="mt-2 rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
@@ -526,6 +865,13 @@ export function ChatMessageList() {
                           </div>
                         ) : null}
                       </div>
+                    ) : message.id.startsWith('pending-') ? (
+                      <div className="mt-2 space-y-2">
+                        <div className="h-3 w-3/4 animate-pulse rounded-full bg-[color:var(--card-border)]" />
+                        <div className="h-3 w-full animate-pulse rounded-full bg-[color:var(--card-border)]" />
+                        <div className="h-3 w-2/3 animate-pulse rounded-full bg-[color:var(--card-border)]" />
+                        <p className="pt-1 text-xs text-[color:var(--text-muted)]">{message.text}</p>
+                      </div>
                     ) : (
                       <div className="mt-2 text-sm leading-7 text-[color:var(--text-soft)] sm:text-[0.97rem]">
                         <ReactMarkdown components={markdownComponents}>
@@ -536,29 +882,10 @@ export function ChatMessageList() {
                   ) : (
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[color:var(--text-soft)] sm:text-[0.97rem]">{message.text}</p>
                   )}
-
-                  {message.retryAction ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void retryAssistantMessage(message)}
-                        disabled={isLoading || (message.retryAt ? message.retryAt > nowMs : false)}
-                        className="rounded-full border border-[color:var(--card-border)] bg-transparent px-3 py-1.5 text-xs font-medium text-[color:var(--text-main)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {language === 'pt' ? 'Tentar novamente' : 'Try again'}
-                      </button>
-                      {message.retryAt && message.retryAt > nowMs ? (
-                        <span className="font-['IBM_Plex_Mono'] text-[0.64rem] uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
-                          {language === 'pt'
-                            ? `Disponivel em ${Math.ceil((message.retryAt - nowMs) / 1000)}s`
-                            : `Available in ${Math.ceil((message.retryAt - nowMs) / 1000)}s`}
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
                 </article>
               </div>
-            ))}
+              )
+            })}
 
             {isLoading && !hasPendingExamMessage ? (
               <div className="flex w-full max-w-[700px] justify-start">

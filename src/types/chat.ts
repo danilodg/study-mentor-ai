@@ -99,6 +99,7 @@ export interface Message {
   retrySourceText?: string
   retryQuestionNumber?: number
   retryAt?: number
+  examPassageSetIndex?: number
 }
 
 export interface AssistantStructuredResponse {
@@ -142,6 +143,7 @@ export interface Conversation {
   examProfile: ExamProfile
   examFlow: ExamFlow
   examPassage: string
+  examPassageHistory: string[]
   examQuestionTarget: number
   questionCount: number
   createdAt: number

@@ -286,7 +286,7 @@ export function parseAssistantReply(rawText: string): AssistantReplyPayload {
   }
 }
 
-type ConversationOverrides = Partial<Pick<Conversation, 'mode' | 'topic' | 'difficulty' | 'title' | 'examProfile' | 'examFlow' | 'examPassage' | 'examQuestionTarget'>>
+type ConversationOverrides = Partial<Pick<Conversation, 'mode' | 'topic' | 'difficulty' | 'title' | 'examProfile' | 'examFlow' | 'examPassage' | 'examPassageHistory' | 'examQuestionTarget'>>
 
 export function createConversation(overrides?: ConversationOverrides) {
   const now = Date.now()
@@ -301,6 +301,7 @@ export function createConversation(overrides?: ConversationOverrides) {
     examProfile: overrides?.examProfile ?? 'general',
     examFlow: overrides?.examFlow ?? 'single',
     examPassage: overrides?.examPassage ?? '',
+    examPassageHistory: overrides?.examPassageHistory ?? [],
     examQuestionTarget: overrides?.examQuestionTarget ?? 0,
     questionCount: 0,
     createdAt: now,
@@ -335,6 +336,9 @@ export function getStoredChatState(chatStorageKey: string) {
         examProfile: conversation.examProfile === 'enem' ? 'enem' : 'general',
         examFlow: conversation.examFlow === 'passage' ? 'passage' : 'single',
         examPassage: typeof conversation.examPassage === 'string' ? conversation.examPassage : '',
+        examPassageHistory: Array.isArray(conversation.examPassageHistory)
+          ? conversation.examPassageHistory.filter((passage): passage is string => typeof passage === 'string')
+          : (typeof conversation.examPassage === 'string' && conversation.examPassage.trim() ? [conversation.examPassage] : []),
         examQuestionTarget: typeof conversation.examQuestionTarget === 'number' ? conversation.examQuestionTarget : 0,
         questionCount: typeof conversation.questionCount === 'number' ? conversation.questionCount : 0,
         createdAt: conversation.createdAt,
@@ -367,6 +371,7 @@ export function getStoredChatState(chatStorageKey: string) {
           examProfile: 'general',
           examFlow: 'single',
           examPassage: '',
+          examPassageHistory: [],
           examQuestionTarget: 0,
           questionCount: 0,
         }],
