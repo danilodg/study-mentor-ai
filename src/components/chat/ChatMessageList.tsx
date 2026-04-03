@@ -143,6 +143,114 @@ export function ChatMessageList() {
     return <Settings2 size={16} />
   }
 
+  function renderAssistantSkeleton(mode: ResponseMode | 'exam') {
+    const lineClass = 'h-3 animate-pulse rounded-full bg-[color:var(--card-border)]'
+    const buttonClass = 'flex h-9 w-full items-center rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] px-2'
+    const buttonLineClass = 'h-2.5 animate-pulse rounded-full bg-[color:var(--card-border)]'
+
+    function renderButtonSkeleton(widthClass: string) {
+      return (
+        <div className={buttonClass}>
+          <div className={`${buttonLineClass} ${widthClass}`} />
+        </div>
+      )
+    }
+
+    if (mode === 'exam' || mode === 'quiz_mcq') {
+      return (
+        <div className="mt-2 space-y-2">
+          <div className={`${lineClass} w-4/5`} />
+          <div className={`${lineClass} w-3/5`} />
+          <div className={`${lineClass} w-5/6`} />
+          <div className="mt-3 grid gap-2">
+            {renderButtonSkeleton('w-11/12')}
+            {renderButtonSkeleton('w-10/12')}
+            {renderButtonSkeleton('w-9/12')}
+            {renderButtonSkeleton('w-8/12')}
+          </div>
+        </div>
+      )
+    }
+
+    if (mode === 'true_false') {
+      return (
+        <div className="mt-2 space-y-2">
+          <div className={`${lineClass} w-4/5`} />
+          <div className={`${lineClass} w-2/3`} />
+          <div className={`${lineClass} w-3/4`} />
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {renderButtonSkeleton('w-4/5')}
+            {renderButtonSkeleton('w-4/5')}
+          </div>
+        </div>
+      )
+    }
+
+    if (mode === 'short_answer') {
+      return (
+        <div className="mt-2 space-y-2">
+          <div className={`${lineClass} w-5/6`} />
+          <div className={`${lineClass} w-3/4`} />
+          <div className="mt-3 h-20 w-full animate-pulse rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)]" />
+        </div>
+      )
+    }
+
+    if (mode === 'ordering') {
+      return (
+        <div className="mt-2 space-y-2">
+          <div className={`${lineClass} w-4/5`} />
+          <div className={`${lineClass} w-3/5`} />
+          <div className={`${lineClass} w-4/6`} />
+          <div className="mt-3 grid gap-2">
+            {renderButtonSkeleton('w-10/12')}
+            {renderButtonSkeleton('w-7/12')}
+            {renderButtonSkeleton('w-9/12')}
+            {renderButtonSkeleton('w-8/12')}
+          </div>
+        </div>
+      )
+    }
+
+    if (mode === 'match_pairs') {
+      return (
+        <div className="mt-2 space-y-2">
+          <div className={`${lineClass} w-4/5`} />
+          <div className={`${lineClass} w-2/3`} />
+          <div className={`${lineClass} w-5/6`} />
+          <div className="mt-3 grid gap-2">
+            {renderButtonSkeleton('w-10/12')}
+            {renderButtonSkeleton('w-8/12')}
+            {renderButtonSkeleton('w-9/12')}
+          </div>
+        </div>
+      )
+    }
+
+    if (mode === 'cloze') {
+      return (
+        <div className="mt-2 space-y-2">
+          <div className={`${lineClass} w-11/12`} />
+          <div className={`${lineClass} w-8/12`} />
+          <div className={`${lineClass} w-9/12`} />
+          <div className="mt-3 flex gap-2">
+            <div className="h-8 w-24 animate-pulse rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)]" />
+            <div className="h-8 w-24 animate-pulse rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)]" />
+            <div className="h-8 w-24 animate-pulse rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)]" />
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="mt-2 space-y-2">
+        <div className={`${lineClass} w-3/4`} />
+        <div className={`${lineClass} w-full`} />
+        <div className={`${lineClass} w-2/3`} />
+      </div>
+    )
+  }
+
   function updateOrderingSelection(messageId: string, currentOrder: string[], position: number, nextItem: string) {
     const next = [...currentOrder]
     const previousIndex = next.findIndex((item) => item === nextItem)
@@ -346,6 +454,28 @@ export function ChatMessageList() {
     }
   }
 
+  const loadingSkeletonMode: ResponseMode | 'exam' = activeConversation?.mode === 'exam'
+    ? 'exam'
+    : responseMode
+  const showPassageSkeletonCard = isLoading
+    && activeConversation?.mode === 'exam'
+    && activeConversation.examFlow === 'passage'
+    && (
+      activeConversation.questionCount <= 0
+      || activeConversation.questionCount >= Math.max(activeConversation.examQuestionTarget || 4, 1)
+    )
+  const showFixedSkeletonPreview = true
+  const fixedSkeletonPreviewModes: Array<{ mode: ResponseMode | 'exam'; label: string }> = [
+    { mode: 'exam', label: language === 'pt' ? 'Modo prova (4 opcoes)' : 'Exam mode (4 options)' },
+    { mode: 'auto', label: language === 'pt' ? 'Resposta auto' : 'Auto response' },
+    { mode: 'quiz_mcq', label: language === 'pt' ? 'Quiz multipla escolha' : 'Quiz multiple choice' },
+    { mode: 'true_false', label: language === 'pt' ? 'Verdadeiro/Falso' : 'True/False' },
+    { mode: 'short_answer', label: language === 'pt' ? 'Resposta curta' : 'Short answer' },
+    { mode: 'ordering', label: language === 'pt' ? 'Ordenacao' : 'Ordering' },
+    { mode: 'match_pairs', label: language === 'pt' ? 'Associacao' : 'Match pairs' },
+    { mode: 'cloze', label: language === 'pt' ? 'Lacunas' : 'Cloze' },
+  ]
+
   return (
     <div className="mt-2 min-h-0 flex-1 overflow-hidden sm:mt-3 lg:mt-4">
       <div ref={scrollRootRef} className="app-scroll mx-auto flex h-full min-h-0 w-full max-w-[1180px] flex-col overflow-y-auto lg:flex-row lg:gap-2">
@@ -381,6 +511,19 @@ export function ChatMessageList() {
                     </section>
                   )
                 })}
+                {showPassageSkeletonCard ? (
+                  <section className="relative" style={{ minHeight: '220px' }}>
+                    <div className="sticky top-[0.5px] rounded-[10px] border border-[color:var(--accent-line)] bg-[color:var(--input-bg)] p-2">
+                      <div className="h-3 w-2/5 animate-pulse rounded-full bg-[color:var(--card-border)]" />
+                      <div className="mt-2 space-y-2">
+                        <div className="h-3 w-full animate-pulse rounded-full bg-[color:var(--card-border)]" />
+                        <div className="h-3 w-11/12 animate-pulse rounded-full bg-[color:var(--card-border)]" />
+                        <div className="h-3 w-10/12 animate-pulse rounded-full bg-[color:var(--card-border)]" />
+                        <div className="h-3 w-9/12 animate-pulse rounded-full bg-[color:var(--card-border)]" />
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
               </div>
             </div>
           </aside>
@@ -863,11 +1006,9 @@ export function ChatMessageList() {
                           </div>
                         ) : null}
                       </div>
-                    ) : message.id.startsWith('pending-') ? (
-                      <div className="mt-2 space-y-2">
-                        <div className="h-3 w-3/4 animate-pulse rounded-full bg-[color:var(--card-border)]" />
-                        <div className="h-3 w-full animate-pulse rounded-full bg-[color:var(--card-border)]" />
-                        <div className="h-3 w-2/3 animate-pulse rounded-full bg-[color:var(--card-border)]" />
+                    ) : message.id.startsWith('pending-') && !message.retryAction ? (
+                      <div className="space-y-2">
+                        {renderAssistantSkeleton(loadingSkeletonMode)}
                         <p className="pt-1 text-xs text-[color:var(--text-muted)]">{message.text}</p>
                       </div>
                     ) : (
@@ -885,12 +1026,29 @@ export function ChatMessageList() {
               )
             })}
 
+            {showFixedSkeletonPreview ? (
+              <div className="grid w-full max-w-[710px] gap-2">
+                {fixedSkeletonPreviewModes.map((preview) => (
+                  <article key={preview.mode} className="glass-card w-full rounded-[10px] p-2">
+                    <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
+                      Mentor AI
+                    </span>
+                    {renderAssistantSkeleton(preview.mode)}
+                    <p className="mt-2 text-xs text-[color:var(--text-muted)]">
+                      {preview.label}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+
             {isLoading && !hasPendingExamMessage ? (
               <div className="flex w-full max-w-[700px] justify-start">
                 <article className="glass-card w-full rounded-[10px] p-2">
                   <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
                     Mentor AI
                   </span>
+                  {renderAssistantSkeleton(loadingSkeletonMode)}
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[color:var(--text-soft)] sm:text-[0.97rem]">
                     {activeConversation?.mode === 'exam'
                       ? (language === 'pt' ? 'Gerando proxima questao...' : 'Generating next question...')
