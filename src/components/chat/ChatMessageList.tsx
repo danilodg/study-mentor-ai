@@ -12,6 +12,7 @@ export function ChatMessageList() {
   const [messageMenuOpenId, setMessageMenuOpenId] = useState<string | null>(null)
   const messageMenuRef = useRef<HTMLDivElement | null>(null)
   const scrollRootRef = useRef<HTMLDivElement | null>(null)
+  const composerFormRef = useRef<HTMLFormElement | null>(null)
   const firstQuestionRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const [orderingDrafts, setOrderingDrafts] = useState<Record<string, string[]>>({})
   const [matchDrafts, setMatchDrafts] = useState<Record<string, Record<string, string>>>({})
@@ -322,21 +323,10 @@ export function ChatMessageList() {
       activeConversation.questionCount <= 0
       || activeConversation.questionCount >= Math.max(activeConversation.examQuestionTarget || 4, 1)
     )
-  const showFixedSkeletonPreview = true
-  const fixedSkeletonPreviewModes: Array<{ mode: ResponseMode | 'exam'; label: string }> = [
-    { mode: 'exam', label: language === 'pt' ? 'Modo prova (4 opcoes)' : 'Exam mode (4 options)' },
-    { mode: 'auto', label: language === 'pt' ? 'Resposta auto' : 'Auto response' },
-    { mode: 'quiz_mcq', label: language === 'pt' ? 'Quiz multipla escolha' : 'Quiz multiple choice' },
-    { mode: 'true_false', label: language === 'pt' ? 'Verdadeiro/Falso' : 'True/False' },
-    { mode: 'short_answer', label: language === 'pt' ? 'Resposta curta' : 'Short answer' },
-    { mode: 'ordering', label: language === 'pt' ? 'Ordenacao' : 'Ordering' },
-    { mode: 'match_pairs', label: language === 'pt' ? 'Associacao' : 'Match pairs' },
-    { mode: 'cloze', label: language === 'pt' ? 'Lacunas' : 'Cloze' },
-  ]
 
   return (
-    <div className="mt-2 min-h-0 flex-1 overflow-hidden sm:mt-3 lg:mt-4">
-      <div ref={scrollRootRef} className="app-scroll mx-auto flex h-full min-h-0 w-full max-w-[1180px] flex-col overflow-y-auto lg:flex-row lg:gap-2">
+    <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden sm:mt-3 lg:mt-4">
+      <div ref={scrollRootRef} className="app-scroll mx-auto flex min-h-0 flex-1 w-full max-w-[1180px] flex-col overflow-y-auto lg:flex-row lg:gap-2">
         {showStickyPassagePanel ? (
           <aside className=" hidden w-[450px] overflow-visible rounded-[10px] lg:block">
 
@@ -516,22 +506,6 @@ export function ChatMessageList() {
               )
             })}
 
-            {showFixedSkeletonPreview ? (
-              <div className="grid w-full max-w-[710px] gap-2">
-                {fixedSkeletonPreviewModes.map((preview) => (
-                  <article key={preview.mode} className="glass-card w-full rounded-[10px] p-2">
-                    <span className="font-['IBM_Plex_Mono'] text-[0.68rem] uppercase tracking-[0.16em] text-[color:var(--text-muted)]">
-                      Mentor AI
-                    </span>
-                    <AssistantSkeleton mode={preview.mode} />
-                    <p className="mt-2 text-xs text-[color:var(--text-muted)]">
-                      {preview.label}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            ) : null}
-
             {isLoading && !hasPendingExamMessage ? (
               <div className="flex w-full max-w-[700px] justify-start">
                 <article className="glass-card w-full rounded-[10px] p-2">
@@ -549,77 +523,96 @@ export function ChatMessageList() {
             ) : null}
           </div>
 
-          <form onSubmit={handleSubmit} className={[
-            'mt-2 flex',
-            showStickyPassagePanel ? 'justify-start' : 'justify-center',
-          ].join(' ')}>
-            <div className="glass-card w-full max-w-[700px] rounded-[10px] p-2 sm:p-2">
-              <div className="flex items-end gap-2">
-                <div ref={responseMenuRef} className="relative shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setIsResponseMenuOpen((current) => !current)}
-                    className="inline-flex h-12 w-12 items-center justify-center rounded-[10px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] text-[color:var(--text-main)] transition hover:bg-[color:var(--mobile-drawer-card-bg)]"
-                    aria-label={language === 'pt' ? 'Tipo de resposta' : 'Response type'}
-                    title={responseModeLabel[language][responseMode]}
-                  >
-                    {getResponseModeIcon(responseMode)}
-                  </button>
-
-                  {isResponseMenuOpen ? (
-                    <div className="absolute bottom-full left-0 z-30 mb-2 w-[220px] rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--mobile-drawer-bg)] p-2 shadow-[0_14px_34px_rgba(6,10,22,0.28)]">
-                      <p className="mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
-                        {language === 'pt' ? 'Tipo de resposta' : 'Response type'}
-                      </p>
-                      <div className="grid gap-2">
-                        {responseModeOptions.map((mode) => (
-                          <button
-                            key={mode}
-                            type="button"
-                            onClick={() => {
-                              setResponseMode(mode)
-                              setIsResponseMenuOpen(false)
-                            }}
-                            className={[
-                              'inline-flex items-center gap-2 rounded-[10px] border px-2 py-2 text-left text-sm',
-                              responseMode === mode
-                                ? 'border-[color:var(--accent-line)] bg-[color:var(--input-bg)] text-[color:var(--text-main)]'
-                                : 'border-[color:var(--card-border)] text-[color:var(--text-soft)]',
-                            ].join(' ')}
-                          >
-                            {getResponseModeIcon(mode)}
-                            <span>{responseModeLabel[language][mode]}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-
-                <textarea
-                  ref={draftTextareaRef}
-                  value={draft}
-                  onChange={(event) => {
-                    setDraft(event.target.value)
-                    resizeDraftTextarea(event.target)
-                  }}
-                  rows={1}
-                  disabled={isLoading}
-                  placeholder={language === 'pt' ? 'Pergunte algo, peca um plano ou gere uma tarefa' : 'Ask something, request a plan, or generate a task'}
-                  className="app-scroll min-h-12 min-w-0 flex-1 resize-none rounded-[10px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] px-2 py-2 leading-6 text-[color:var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] [&::placeholder]:overflow-hidden [&::placeholder]:text-ellipsis [&::placeholder]:whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-70 focus:border-[color:var(--accent-line)]"
-                />
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  aria-label={language === 'pt' ? 'Enviar mensagem' : 'Send message'}
-                  className="accent-button inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  <ArrowUp size={16} />
-                </button>
-              </div>
-            </div>
-          </form>
         </div>
+      </div>
+
+      <div className={[
+        'mx-auto mt-2 flex w-full max-w-[1180px] pb-1',
+        'justify-center',
+      ].join(' ')}>
+        <form ref={composerFormRef} onSubmit={handleSubmit} className={[
+          'flex w-full',
+          showStickyPassagePanel ? 'max-w-[1180px]' : 'max-w-[700px]',
+        ].join(' ')}>
+          <div className="glass-card w-full rounded-[10px] p-2 sm:p-2">
+            <div className="flex items-end gap-2">
+              <div ref={responseMenuRef} className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsResponseMenuOpen((current) => !current)}
+                  className="inline-flex h-12 w-12 items-center justify-center rounded-[10px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] text-[color:var(--text-main)] transition hover:bg-[color:var(--mobile-drawer-card-bg)]"
+                  aria-label={language === 'pt' ? 'Tipo de resposta' : 'Response type'}
+                  title={responseModeLabel[language][responseMode]}
+                >
+                  {getResponseModeIcon(responseMode)}
+                </button>
+
+                {isResponseMenuOpen ? (
+                  <div className="absolute bottom-full left-0 z-30 mb-2 w-[220px] rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--mobile-drawer-bg)] p-2 shadow-[0_14px_34px_rgba(6,10,22,0.28)]">
+                    <p className="mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
+                      {language === 'pt' ? 'Tipo de resposta' : 'Response type'}
+                    </p>
+                    <div className="grid gap-2">
+                      {responseModeOptions.map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => {
+                            setResponseMode(mode)
+                            setIsResponseMenuOpen(false)
+                          }}
+                          className={[
+                            'inline-flex items-center gap-2 rounded-[10px] border px-2 py-2 text-left text-sm',
+                            responseMode === mode
+                              ? 'border-[color:var(--accent-line)] bg-[color:var(--input-bg)] text-[color:var(--text-main)]'
+                              : 'border-[color:var(--card-border)] text-[color:var(--text-soft)]',
+                          ].join(' ')}
+                        >
+                          {getResponseModeIcon(mode)}
+                          <span>{responseModeLabel[language][mode]}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              <textarea
+                ref={draftTextareaRef}
+                value={draft}
+                onChange={(event) => {
+                  setDraft(event.target.value)
+                  resizeDraftTextarea(event.target)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
+                    return
+                  }
+
+                  event.preventDefault()
+
+                  if (isLoading || !draft.trim()) {
+                    return
+                  }
+
+                  composerFormRef.current?.requestSubmit()
+                }}
+                rows={1}
+                disabled={isLoading}
+                placeholder={language === 'pt' ? 'Pergunte algo, peca um plano ou gere uma tarefa' : 'Ask something, request a plan, or generate a task'}
+                className="app-scroll min-h-12 min-w-0 flex-1 resize-none rounded-[10px] border border-[color:var(--input-border)] bg-[color:var(--input-bg)] px-2 py-2 leading-6 text-[color:var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] [&::placeholder]:overflow-hidden [&::placeholder]:text-ellipsis [&::placeholder]:whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-70 focus:border-[color:var(--accent-line)]"
+              />
+              <button
+                type="submit"
+                disabled={isLoading}
+                aria-label={language === 'pt' ? 'Enviar mensagem' : 'Send message'}
+                className="accent-button inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                <ArrowUp size={16} />
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   )
