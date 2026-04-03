@@ -348,13 +348,11 @@ export function ChatMessageList() {
 
   return (
     <div className="mt-2 min-h-0 flex-1 overflow-hidden sm:mt-3 lg:mt-4">
-      <div ref={scrollRootRef} className="app-scroll mx-auto flex h-full min-h-0 w-full max-w-[980px] flex-col overflow-y-auto lg:flex-row lg:gap-2">
+      <div ref={scrollRootRef} className="app-scroll mx-auto flex h-full min-h-0 w-full max-w-[1180px] flex-col overflow-y-auto lg:flex-row lg:gap-2">
         {showStickyPassagePanel ? (
-          <aside className="glass-card hidden w-[350px] shrink-0 overflow-visible rounded-[10px] border border-[color:var(--card-border)] bg-transparent p-2 lg:block">
-            <p className="font-['IBM_Plex_Mono'] text-[0.66rem] uppercase tracking-[0.14em] text-[color:var(--accent-soft)]">
-              {language === 'pt' ? 'Textos-base' : 'Base passages'}
-            </p>
-            <div className="mt-2">
+          <aside className=" hidden w-[450px] overflow-visible rounded-[10px] lg:block">
+
+            <div>
               <div className="grid gap-2">
                 {examPassageHistory.map((passage, index) => {
                   const questionCount = Math.max(passageQuestionCounts[index] || 0, 1)
@@ -370,7 +368,7 @@ export function ChatMessageList() {
                       className="relative"
                       style={{ minHeight: `${blockHeightPx}px` }}
                     >
-                      <div className="sticky top-2 rounded-[10px] border border-[color:var(--accent-line)] bg-[color:var(--input-bg)] p-2">
+                      <div className="sticky top-[0.5px] rounded-[10px] border border-[color:var(--accent-line)] bg-[color:var(--input-bg)] p-2">
                         <p className="font-['IBM_Plex_Mono'] text-[0.62rem] uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
                           {language === 'pt'
                             ? `Bloco ${index + 1} de ${examPassageHistory.length}`
@@ -423,7 +421,7 @@ export function ChatMessageList() {
                   }
                 }}
                 className={[
-                  'flex w-full max-w-[700px]',
+                  'flex w-full max-w-[710px]',
                   message.role === 'user' ? 'justify-end' : 'justify-start',
                 ].join(' ')}
               >
