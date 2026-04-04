@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import type { Message, QuizOptionId } from '../../../types/chat'
@@ -17,9 +18,22 @@ export function AssistantQuizMessage({
   markdownInlineComponents,
   selectQuizOption,
 }: AssistantQuizMessageProps) {
+  const [draftOptionId, setDraftOptionId] = useState<QuizOptionId | null>(null)
+
   if (!message.quiz) {
     return null
   }
+
+  const isAnswered = Boolean(message.selectedOptionId)
+
+  useEffect(() => {
+    if (isAnswered && message.selectedOptionId) {
+      setDraftOptionId(message.selectedOptionId)
+      return
+    }
+
+    setDraftOptionId(null)
+  }, [isAnswered, message.id, message.selectedOptionId])
 
   return (
     <div className="mt-2 rounded-[10px] border border-[color:var(--card-border)] bg-[color:var(--input-bg)] p-2">
@@ -33,21 +47,21 @@ export function AssistantQuizMessage({
       </div>
       <div className="mt-2 grid gap-2">
         {message.quiz.options.map((option) => {
-          const isSelected = message.selectedOptionId === option.id
-          const isAnswered = Boolean(message.selectedOptionId)
+          const isSelected = isAnswered ? message.selectedOptionId === option.id : draftOptionId === option.id
           const isCorrect = option.id === message.quiz?.correctOptionId
 
           return (
             <button
               key={option.id}
               type="button"
-              onClick={() => selectQuizOption(message.id, option.id)}
+              onClick={() => setDraftOptionId(option.id)}
               disabled={isAnswered}
               className={[
                 'rounded-[10px] border px-2 py-2 text-left text-sm transition',
                 isAnswered && isCorrect ? 'border-emerald-400/60 bg-emerald-500/10 text-[color:var(--text-main)]' : '',
                 isAnswered && isSelected && !isCorrect ? 'border-rose-400/60 bg-rose-500/10 text-[color:var(--text-main)]' : '',
-                !isAnswered ? 'border-[color:var(--card-border)] bg-transparent hover:-translate-y-0.5' : '',
+                !isAnswered && isSelected ? 'border-[color:var(--accent-soft)] bg-[color:var(--panel-bg)] text-[color:var(--text-main)]' : '',
+                !isAnswered && !isSelected ? 'border-[color:var(--card-border)] bg-transparent hover:-translate-y-0.5' : '',
                 isAnswered && !isSelected && !isCorrect ? 'border-[color:var(--card-border)] opacity-75' : '',
               ].join(' ')}
             >
@@ -57,6 +71,22 @@ export function AssistantQuizMessage({
           )
         })}
       </div>
+      {!isAnswered ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (!draftOptionId) {
+              return
+            }
+
+            selectQuizOption(message.id, draftOptionId)
+          }}
+          disabled={!draftOptionId}
+          className="mt-2 rounded-[10px] border border-[color:var(--card-border)] px-3 py-2 text-xs text-[color:var(--text-main)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {language === 'pt' ? 'Verificar resposta' : 'Check answer'}
+        </button>
+      ) : null}
       {message.selectedOptionId ? (
         <div className="mt-2 text-sm leading-6 text-[color:var(--text-soft)]">
           {message.selectedOptionId === message.quiz.correctOptionId

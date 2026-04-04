@@ -35,6 +35,35 @@ function createOrderEntries(items: string[]) {
   })
 }
 
+function isSameOrder(left: string[], right: string[]) {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  return left.every((item, index) => item === right[index])
+}
+
+function createInitialOrdering(items: string[], correctOrder: string[]) {
+  if (items.length <= 1) {
+    return items
+  }
+
+  const shuffled = [...items]
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1))
+    const current = shuffled[index]
+    shuffled[index] = shuffled[swapIndex]
+    shuffled[swapIndex] = current
+  }
+
+  if (!isSameOrder(shuffled, correctOrder)) {
+    return shuffled
+  }
+
+  return [...shuffled.slice(1), shuffled[0]]
+}
+
 interface AssistantOrderingMessageProps {
   message: Message
   language: 'pt' | 'en'
@@ -111,7 +140,7 @@ export function AssistantOrderingMessage({
   }
 
   const options = message.ordering.items
-  const currentOrder = orderingDrafts[message.id] ?? options
+  const currentOrder = orderingDrafts[message.id] ?? createInitialOrdering(options, message.ordering.correctOrder)
   const submittedOrder = message.orderingAnswer ?? options
   const displayedOrder = message.orderingSubmitted ? submittedOrder : currentOrder
   const orderEntries = useMemo(() => createOrderEntries(displayedOrder), [displayedOrder])
@@ -181,7 +210,7 @@ export function AssistantOrderingMessage({
           onClick={() => submitOrderingAnswer(message.id, currentOrder)}
           className="mt-2 rounded-[10px] border border-[color:var(--card-border)] px-3 py-2 text-xs text-[color:var(--text-main)]"
         >
-          {language === 'pt' ? 'Responder ordenacao' : 'Submit ordering'}
+          {language === 'pt' ? 'Verificar resposta' : 'Check answer'}
         </button>
       ) : null}
       {message.orderingSubmitted && message.ordering.explanation ? (
